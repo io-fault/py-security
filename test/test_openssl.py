@@ -16,8 +16,8 @@ def test_version(test):
 	test/openssl.version_info[2] / int
 
 def test_certificate(test):
-	from ... import pki
-	fio = pki.certificate('fault.io')
+	from ..fault import pki
+	fio = pki.certificate()
 	crt = openssl.Certificate(fio)
 	print(str(crt))
 	print(repr(crt))
@@ -40,7 +40,7 @@ def test_no_certificates(test):
 
 def test_io(test):
 	return
-	from ... import pki
+	from ..fault import pki
 
 	fio = pki.certificate('fault.io')
 	k = None
