@@ -261,7 +261,7 @@ pop_openssl_error(void)
 static void
 set_openssl_error(const char *exc_name)
 {
-	PyObj err, exc = import_sibling("abstract", exc_name);
+	PyObj err, exc = import_sibling("core", exc_name);
 	if (exc == NULL)
 		return;
 
