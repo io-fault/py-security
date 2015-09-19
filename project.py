@@ -1,24 +1,24 @@
 'project information'
 
 #: Project name.
-name = 'shade'
+name = 'cryptography'
 abstract = 'conceal sensitive information'
 
 #: Relevant emoji or reference--URL or relative file path--to an image file.
-icon = '👻'
+icon = '🔑'
 
 #: IRI based project identity. (project homepage)
-identity = 'http://fault.io/python/shade'
+identity = 'http://fault.io/python/cryptography'
 
 #: Responsible Party
-meaculpa = 'fault.io'
+controller = 'fault.io'
 
 #: Contact point for the Responsible Party
 contact = 'mailto:critical@fault.io'
 
 #: The name of the conceptual branch of development.
 #: Essentially, a codename for the major version of the project.
-fork = 'riddles'
+fork = 'shade'
 
 #: Version tuple: (major, minor, patch)
 version_info = (0, 1, 0)

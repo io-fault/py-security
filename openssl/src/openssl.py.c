@@ -12,8 +12,8 @@ csource = """
  * * The current implementation of OpenSSL means that a callback selecting
  * * the exact chain is... limited.
  */
+
 /*
- *
  * X509_NAMES = SSL_get_client_CA_list(transport_t) - client connection get server (requirements) CA list.
  */
 #include <stdio.h>
@@ -36,20 +36,20 @@ csource = """
 #include <openssl/objects.h>
 
 #ifdef OPENSSL_NO_EVP
-#error requires openssl with EVP
+	#error requires openssl with EVP
 #endif
 
 #if 0
-#ifndef OSSL_NIDS
-/*
- * OSSL_NIDS() is defined by the probe and pre-included.
- */
-#error probe module did not render OSSL_NIDS template macro
-#endif
+	#ifndef OSSL_NIDS
+	/*
+	 * OSSL_NIDS() is defined by the probe and pre-included.
+	 */
+		#error probe module did not render OSSL_NIDS template macro
+	#endif
 #endif
 
 #ifndef SHADE_OPENSSL_CIPHERS
-#define SHADE_OPENSSL_CIPHERS "RC4:HIGH:!aNULL:!eNULL:!NULL:!MD5"
+	#define SHADE_OPENSSL_CIPHERS "RC4:HIGH:!aNULL:!eNULL:!NULL:!MD5"
 #endif
 
 /*
@@ -84,9 +84,9 @@ typedef struct {
 } memory_t;
 
 typedef enum {
-	tls_protocol_error = -3,		/* effectively terminated */
-	tls_remote_termination = -2,	/* shutdown from remote */
-	tls_local_termination = -1,	/* shutdown from local request */
+	tls_protocol_error = -3,     /* effectively terminated */
+	tls_remote_termination = -2, /* shutdown from remote */
+	tls_local_termination = -1,  /* shutdown from local request */
 	tls_not_terminated = 0,
 	tls_terminating = 1,
 } termination_t;
@@ -147,9 +147,9 @@ static PyTypeObject ContextType, TransportType;
  * ORG, TYPE, ID, NAME, VERSION, OSSL_FRAGMENT
  */
 #define X_TLS_PROTOCOLS() \
-	X_TLS_PROTOCOL(ietf.org, RFC, 6101, SSL, 3, 0, SSLv23)	\
-	X_TLS_PROTOCOL(ietf.org, RFC, 2246, TLS, 1, 0, TLSv1)		\
-	X_TLS_PROTOCOL(ietf.org, RFC, 4346, TLS, 1, 1, TLSv1_1)	\
+	X_TLS_PROTOCOL(ietf.org, RFC, 6101, SSL, 3, 0, SSLv23)  \
+	X_TLS_PROTOCOL(ietf.org, RFC, 2246, TLS, 1, 0, TLSv1)   \
+	X_TLS_PROTOCOL(ietf.org, RFC, 4346, TLS, 1, 1, TLSv1_1) \
 	X_TLS_PROTOCOL(ietf.org, RFC, 5246, TLS, 1, 2, TLSv1_2)
 
 #define X_CERTIFICATE_TYPES() \
@@ -161,13 +161,13 @@ static PyTypeObject ContextType, TransportType;
  * Context Certificate Loading
  * Context Certificate Loading
  */
-#define X_TLS_ALGORITHMS()	\
-	X_TLS_ALGORITHMS(RSA)	\
-	X_TLS_ALGORITHMS(DSA)	\
+#define X_TLS_ALGORITHMS() \
+	X_TLS_ALGORITHMS(RSA)  \
+	X_TLS_ALGORITHMS(DSA)  \
 	X_TLS_ALGORITHMS(DH)
 
-#define X_CA_EVENTS()			\
-	X_CA_EVENT(CSR, REQUEST)	\
+#define X_CA_EVENTS()        \
+	X_CA_EVENT(CSR, REQUEST) \
 	X_CA_EVENT(CRL, REVOKE)
 
 /*
@@ -180,10 +180,10 @@ LOCAL_SYM(PyObj buf, pem_password_cb *cb, void *cb_data) \
 	Py_buffer pb; \
 	TYP element = NULL; \
 	BIO *bio; \
-\
+	\
 	if (PyObject_GetBuffer(buf, &pb, 0)) \
 		return(NULL); XCOVERAGE \
-\
+	\
 	/* Implicit Read-Only BIO: Py_buffer data is directly referenced. */ \
 	bio = BIO_new_mem_buf(GetPointer(pb), GetSize(pb)); \
 	if (bio == NULL) \
@@ -195,7 +195,7 @@ LOCAL_SYM(PyObj buf, pem_password_cb *cb, void *cb_data) \
 		element = OSSL_CALL(bio, NULL, cb, cb_data); \
 		BIO_free(bio); \
 	} \
-\
+	\
 	PyBuffer_Release(&pb); \
 	return(element); \
 }
@@ -316,9 +316,10 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 	SSL_set_bio(tls->tls_state, tls->tls_memory.ossl_breads, tls->tls_memory.ossl_bwrites);
 
 	return(tls);
-fail:
-	Py_DECREF(tls);
-	return(NULL);
+
+	fail:
+		Py_DECREF(tls);
+		return(NULL);
 }
 
 static int
@@ -607,25 +608,31 @@ str_from_asn1_time(ASN1_TIME *t)
 }
 
 #define CERTIFICATE_PROPERTIES() \
-	CERT_PROPERTY(not_before_string, "The 'notBefore' field as a UNIX timestamp", X509_get_notBefore, str_from_asn1_time) \
-	CERT_PROPERTY(not_after_string, "The 'notAfter' field as a UNIX timestamp", X509_get_notAfter, str_from_asn1_time) \
-	CERT_PROPERTY(signature_type, "The type of used to sign the key.", X509_extract_key, key_from_ossl_key) \
-	CERT_PROPERTY(subject, "The raw subject data of the cerficate.", X509_get_subject_name, seq_from_names) \
-	CERT_PROPERTY(public_key, "The public key provided by the certificate.", X509_extract_key, key_from_ossl_key) \
+	CERT_PROPERTY(not_before_string, \
+		"The 'notBefore' field as a UNIX timestamp", X509_get_notBefore, str_from_asn1_time) \
+	CERT_PROPERTY(not_after_string, \
+		"The 'notAfter' field as a UNIX timestamp", X509_get_notAfter, str_from_asn1_time) \
+	CERT_PROPERTY(signature_type, \
+		"The type of used to sign the key.", X509_extract_key, key_from_ossl_key) \
+	CERT_PROPERTY(subject, \
+		"The raw subject data of the cerficate.", X509_get_subject_name, seq_from_names) \
+	CERT_PROPERTY(public_key, \
+		"The public key provided by the certificate.", X509_extract_key, key_from_ossl_key) \
 	CERT_PROPERTY(version, "The Format Version", X509_get_version, PyLong_FromLong)
 
 #define CERT_PROPERTY(NAME, DOC, GET, CONVERT) \
-static PyObj certificate_get_##NAME(PyObj crt) \
-{ \
-	certificate_t ossl_crt = ((Certificate) crt)->ossl_crt; \
-	return(CONVERT(GET(ossl_crt))); \
-} \
+	static PyObj certificate_get_##NAME(PyObj crt) \
+	{ \
+		certificate_t ossl_crt = ((Certificate) crt)->ossl_crt; \
+		return(CONVERT(GET(ossl_crt))); \
+	} \
 
-CERTIFICATE_PROPERTIES()
+	CERTIFICATE_PROPERTIES()
 #undef CERT_PROPERTY
 
 static PyGetSetDef certificate_getset[] = {
-#define CERT_PROPERTY(NAME, DOC, UNUSED1, UNUSED2) {#NAME, certificate_get_##NAME, NULL, PyDoc_STR(DOC)},
+#define CERT_PROPERTY(NAME, DOC, UNUSED1, UNUSED2) \
+	{#NAME, certificate_get_##NAME, NULL, PyDoc_STR(DOC)},
 
 CERTIFICATE_PROPERTIES()
 #undef CERT_PROPERTY
@@ -693,9 +700,7 @@ certificate_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	PyObj pem;
 	Certificate cert;
 
-	if (!PyArg_ParseTupleAndKeywords(args, kw,
-		"O", kwlist, &pem
-	))
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "O", kwlist, &pem))
 		return(NULL); XCOVERAGE
 
 	cert = (Certificate) subtype->tp_alloc(subtype, 0);
@@ -709,57 +714,57 @@ certificate_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		goto ossl_error;
 
 	return((PyObj) cert);
-ossl_error:
-	set_openssl_error("Error");
-fail:
-	Py_XDECREF(cert);
-	return(NULL);
+
+	ossl_error:
+		set_openssl_error("Error");
+	fail:
+		Py_XDECREF(cert);
+		return(NULL);
 }
 
-PyDoc_STRVAR(certificate_doc,
-"OpenSSL X509 Certificate Objects");
+PyDoc_STRVAR(certificate_doc, "OpenSSL X509 Certificate Objects");
 
 static PyTypeObject
 CertificateType = {
 	PyVarObject_HEAD_INIT(NULL, 0)
-	QPATH("Certificate"),		/* tp_name */
-	sizeof(struct Certificate),/* tp_basicsize */
-	0,									/* tp_itemsize */
-	certificate_dealloc,			/* tp_dealloc */
-	NULL,								/* tp_print */
-	NULL,								/* tp_getattr */
-	NULL,								/* tp_setattr */
-	NULL,								/* tp_compare */
-	certificate_repr,				/* tp_repr */
-	NULL,								/* tp_as_number */
-	NULL,								/* tp_as_sequence */
-	NULL,								/* tp_as_mapping */
-	NULL,								/* tp_hash */
-	NULL,								/* tp_call */
-	certificate_str,				/* tp_str */
-	NULL,								/* tp_getattro */
-	NULL,								/* tp_setattro */
-	NULL,								/* tp_as_buffer */
+	QPATH("Certificate"),           /* tp_name */
+	sizeof(struct Certificate),     /* tp_basicsize */
+	0,                              /* tp_itemsize */
+	certificate_dealloc,            /* tp_dealloc */
+	NULL,                           /* tp_print */
+	NULL,                           /* tp_getattr */
+	NULL,                           /* tp_setattr */
+	NULL,                           /* tp_compare */
+	certificate_repr,               /* tp_repr */
+	NULL,                           /* tp_as_number */
+	NULL,                           /* tp_as_sequence */
+	NULL,                           /* tp_as_mapping */
+	NULL,                           /* tp_hash */
+	NULL,                           /* tp_call */
+	certificate_str,                /* tp_str */
+	NULL,                           /* tp_getattro */
+	NULL,                           /* tp_setattro */
+	NULL,                           /* tp_as_buffer */
 	Py_TPFLAGS_BASETYPE|
-	Py_TPFLAGS_DEFAULT,			/* tp_flags */
-	certificate_doc,				/* tp_doc */
-	NULL,								/* tp_traverse */
-	NULL,								/* tp_clear */
-	NULL,								/* tp_richcompare */
-	0,									/* tp_weaklistoffset */
-	NULL,								/* tp_iter */
-	NULL,								/* tp_iternext */
-	certificate_methods,			/* tp_methods */
-	certificate_members,			/* tp_members */
-	certificate_getset,			/* tp_getset */
-	NULL,								/* tp_base */
-	NULL,								/* tp_dict */
-	NULL,								/* tp_descr_get */
-	NULL,								/* tp_descr_set */
-	0,									/* tp_dictoffset */
-	NULL,								/* tp_init */
-	NULL,								/* tp_alloc */
-	certificate_new,				/* tp_new */
+	Py_TPFLAGS_DEFAULT,             /* tp_flags */
+	certificate_doc,                /* tp_doc */
+	NULL,                           /* tp_traverse */
+	NULL,                           /* tp_clear */
+	NULL,                           /* tp_richcompare */
+	0,                              /* tp_weaklistoffset */
+	NULL,                           /* tp_iter */
+	NULL,                           /* tp_iternext */
+	certificate_methods,            /* tp_methods */
+	certificate_members,            /* tp_members */
+	certificate_getset,             /* tp_getset */
+	NULL,                           /* tp_base */
+	NULL,                           /* tp_dict */
+	NULL,                           /* tp_descr_get */
+	NULL,                           /* tp_descr_set */
+	0,                              /* tp_dictoffset */
+	NULL,                           /* tp_init */
+	NULL,                           /* tp_alloc */
+	certificate_new,                /* tp_new */
 };
 
 /*
@@ -795,10 +800,10 @@ static PyMethodDef
 context_methods[] = {
 	{"rallocate", (PyCFunction) context_rallocate,
 		METH_NOARGS, PyDoc_STR(
-"rallocate()\n\n"
-"Allocate a TLS :py:class:`Transport` instance for secure transmission of data associated with the Context."
-"\n"
-)},
+			"Allocate a TLS :py:class:`Transport` instance for "
+			"secure transmission of data associated with the Context."
+		)
+	},
 
 	{NULL,},
 };
@@ -896,16 +901,17 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		goto fail;
 	}
 
-#ifdef SSL_OP_NO_SSLv2
-	if (!allow_ssl_v2)
-	{
-		/*
-		 * Require exlicit override to allow this.
-		 */
-		SSL_CTX_set_options(ctx->tls_context, SSL_OP_NO_SSLv2);
-	}
-#else
-#endif
+	#ifdef SSL_OP_NO_SSLv2
+		if (!allow_ssl_v2)
+		{
+			/*
+			 * Require exlicit override to allow this.
+			 */
+			SSL_CTX_set_options(ctx->tls_context, SSL_OP_NO_SSLv2);
+		}
+	#else
+
+	#endif
 
 	if (!SSL_CTX_set_cipher_list(ctx->tls_context, ciphers))
 		goto ossl_error;
@@ -935,7 +941,8 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 			goto ossl_error;
 		}
 
-		if (SSL_CTX_use_PrivateKey(ctx->tls_context, key) && SSL_CTX_check_private_key(ctx->tls_context))
+		if (SSL_CTX_use_PrivateKey(ctx->tls_context, key)
+				&& SSL_CTX_check_private_key(ctx->tls_context))
 			ctx->tls_key_status = key_available;
 		else
 		{
@@ -944,57 +951,58 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	}
 
 	return((PyObj) ctx);
-ossl_error:
-	set_openssl_error("ContextError");
-fail:
-	Py_XDECREF(ctx);
-	return(NULL);
+
+	ossl_error:
+		set_openssl_error("ContextError");
+	fail:
+		Py_XDECREF(ctx);
+		return(NULL);
 }
 
 PyDoc_STRVAR(context_doc,
-"OpenSSL security context objects");
+	"OpenSSL security context objects");
 
 static PyTypeObject
 ContextType = {
 	PyVarObject_HEAD_INIT(NULL, 0)
-	QPATH("Context"),				/* tp_name */
-	sizeof(struct Context),		/* tp_basicsize */
-	0,									/* tp_itemsize */
-	context_dealloc,				/* tp_dealloc */
-	NULL,								/* tp_print */
-	NULL,								/* tp_getattr */
-	NULL,								/* tp_setattr */
-	NULL,								/* tp_compare */
-	context_repr,					/* tp_repr */
-	NULL,								/* tp_as_number */
-	NULL,								/* tp_as_sequence */
-	NULL,								/* tp_as_mapping */
-	NULL,								/* tp_hash */
-	NULL,								/* tp_call */
-	NULL,								/* tp_str */
-	NULL,								/* tp_getattro */
-	NULL,								/* tp_setattro */
-	NULL,								/* tp_as_buffer */
+	QPATH("Context"),                /* tp_name */
+	sizeof(struct Context),          /* tp_basicsize */
+	0,                               /* tp_itemsize */
+	context_dealloc,                 /* tp_dealloc */
+	NULL,                            /* tp_print */
+	NULL,                            /* tp_getattr */
+	NULL,                            /* tp_setattr */
+	NULL,                            /* tp_compare */
+	context_repr,                    /* tp_repr */
+	NULL,                            /* tp_as_number */
+	NULL,                            /* tp_as_sequence */
+	NULL,                            /* tp_as_mapping */
+	NULL,                            /* tp_hash */
+	NULL,                            /* tp_call */
+	NULL,                            /* tp_str */
+	NULL,                            /* tp_getattro */
+	NULL,                            /* tp_setattro */
+	NULL,                            /* tp_as_buffer */
 	Py_TPFLAGS_BASETYPE|
-	Py_TPFLAGS_DEFAULT,			/* tp_flags */
-	context_doc,					/* tp_doc */
-	NULL,								/* tp_traverse */
-	NULL,								/* tp_clear */
-	NULL,								/* tp_richcompare */
-	0,									/* tp_weaklistoffset */
-	NULL,								/* tp_iter */
-	NULL,								/* tp_iternext */
-	context_methods,				/* tp_methods */
-	context_members,				/* tp_members */
-	NULL,								/* tp_getset */
-	NULL,								/* tp_base */
-	NULL,								/* tp_dict */
-	NULL,								/* tp_descr_get */
-	NULL,								/* tp_descr_set */
-	0,									/* tp_dictoffset */
-	NULL,								/* tp_init */
-	NULL,								/* tp_alloc */
-	context_new,					/* tp_new */
+	Py_TPFLAGS_DEFAULT,              /* tp_flags */
+	context_doc,                     /* tp_doc */
+	NULL,                            /* tp_traverse */
+	NULL,                            /* tp_clear */
+	NULL,                            /* tp_richcompare */
+	0,                               /* tp_weaklistoffset */
+	NULL,                            /* tp_iter */
+	NULL,                            /* tp_iternext */
+	context_methods,                 /* tp_methods */
+	context_members,                 /* tp_members */
+	NULL,                            /* tp_getset */
+	NULL,                            /* tp_base */
+	NULL,                            /* tp_dict */
+	NULL,                            /* tp_descr_get */
+	NULL,                            /* tp_descr_set */
+	0,                               /* tp_dictoffset */
+	NULL,                            /* tp_init */
+	NULL,                            /* tp_alloc */
+	context_new,                     /* tp_new */
 };
 
 static const char *
@@ -1194,6 +1202,7 @@ transport_leak_session(PyObj self)
 	/*
 	 * Subsequent terminate() call will not notify the peer.
 	 */
+
 	SSL_set_quiet_shutdown(tls->tls_state, 1);
 	Py_RETURN_NONE;
 }
@@ -1213,6 +1222,7 @@ transport_terminate(PyObj self)
 	update_io_sizes(tls);
 
 	Py_INCREF(Py_True);
+
 	return(Py_True); /* signals that shutdown has been initiated */
 }
 
@@ -1220,62 +1230,79 @@ static PyMethodDef
 transport_methods[] = {
 	{"status", (PyCFunction) transport_status,
 		METH_NOARGS, PyDoc_STR(
-"status()\n\n"
-"\n"
-)},
+			"Get the transport's status. XXX: ambiguous docs"
+		)
+	},
+
 	{"leak_session", (PyCFunction) transport_leak_session,
 		METH_NOARGS, PyDoc_STR(
-"leak_session()\n\n"
-"Force the transport's session to be leaked regardless of its shutdown state.\n"
-"`<http://www.openssl.org/docs/ssl/SSL_set_shutdown.html>`_"
-"\n"
-)},
+			"Force the transport's session to be leaked regardless of its shutdown state.\n"
+			"`<http://www.openssl.org/docs/ssl/SSL_set_shutdown.html>`_"
+		)
+	},
 
 	{"terminate", (PyCFunction) transport_terminate,
 		METH_NOARGS, PyDoc_STR(
-"terminate()\n\n"
-"Initiate the shutdown sequence for the TLS state."
-"Enciphered reads and writes must be performed in order to complete the sequence."
-"\n"
-)},
+			"Initiate the shutdown sequence for the TLS state. "
+			"Enciphered reads and writes must be performed in order to complete the sequence."
+		)
+	},
 
 	{"read_enciphered", (PyCFunction) transport_read_enciphered,
 		METH_O, PyDoc_STR(
-"read_enciphered(buffer)\n\n"
-"Get enciphered data to be written to the remote endpoint. Transfer to be written."
-"\n"
-)},
+			"Get enciphered data to be written to the remote endpoint. "
+			"Transfer to be written.\n"
+		)
+	},
+
 	{"write_enciphered", (PyCFunction) transport_write_enciphered,
 		METH_O, PyDoc_STR(
-"write_enciphered()\n\n"
-"Put enciphered data into the TLS channel to be later decrypted and retrieved with read_deciphered."
-"\n"
-)},
+			"Put enciphered data into the TLS channel to be later "
+			"decrypted and retrieved with read_deciphered.\n"
+		)
+	},
 
 	{"read_deciphered", (PyCFunction) transport_read_deciphered,
 		METH_O, PyDoc_STR(
-"read_deciphered()\n\n"
-"Get decrypted data from the TLS channel for processing by the local endpoint."
-"\n"
-)},
+			"read_deciphered()\n\n"
+			"Get decrypted data from the TLS channel for processing by the local endpoint."
+		)
+	},
+
 	{"write_deciphered", (PyCFunction) transport_write_deciphered,
 		METH_O, PyDoc_STR(
-"write_deciphered(buffer)\n\n"
-"Put decrypted data into the TLS channel to be sent to the remote endpoint after encryption."
-"\n"
-)},
+			"Put decrypted data into the TLS channel to be "
+			"sent to the remote endpoint after encryption."
+		)
+	},
 
 	{NULL,},
 };
 
 static PyMemberDef
 transport_members[] = {
-	{"error", T_OBJECT, offsetof(struct Transport, tls_protocol_error), READONLY,
-		PyDoc_STR("Protocol error data. :py:obj:`None` if no *protocol* error occurred.")},
-	{"pending_enciphered_writes", T_ULONG, offsetof(struct Transport, tls_pending_writes), READONLY,
-		PyDoc_STR("Snapshot of the Transport's out-going buffer used for writing. Growth indicates need for lower-level write.")},
-	{"pending_enciphered_reads", T_ULONG, offsetof(struct Transport, tls_pending_reads), READONLY,
-		PyDoc_STR("Snapshot of the Transport's incoming buffer used for reading. Growth indicates need for higher-level read attempt.")},
+	{"error", T_OBJECT,
+		offsetof(struct Transport, tls_protocol_error), READONLY,
+		PyDoc_STR(
+			"Protocol error data. :py:obj:`None` if no *protocol* error occurred."
+		)
+	},
+
+	{"pending_enciphered_writes", T_ULONG,
+		offsetof(struct Transport, tls_pending_writes), READONLY,
+		PyDoc_STR(
+			"Snapshot of the Transport's out-going buffer used for writing. "
+			"Growth indicates need for lower-level write."
+		)
+	},
+
+	{"pending_enciphered_reads", T_ULONG,
+		offsetof(struct Transport, tls_pending_reads), READONLY,
+		PyDoc_STR(
+			"Snapshot of the Transport's incoming buffer used for reading. "
+			"Growth indicates need for higher-level read attempt.")
+	},
+
 	{NULL,},
 };
 
@@ -1289,18 +1316,18 @@ transport_get_protocol(PyObj self, void *_)
 	/*
 	 * XXX: not working... =\
 	 */
-#define X_TLS_PROTOCOL(ORG, STD, SID, NAME, MAJOR_VERSION, MINOR_VERSION, OSSL_METHOD) \
-	if (p == ((intptr_t) OSSL_METHOD##_method) \
-		|| p ==((intptr_t) OSSL_METHOD##_client_method) \
-		|| p == ((intptr_t) OSSL_METHOD##_server_method)) \
-		rob = Py_BuildValue("(ssi)sii", #ORG, #STD, SID, #NAME, MAJOR_VERSION, MINOR_VERSION); \
-	else
-	X_TLS_PROTOCOLS()
-	{
-		rob = Py_None;
-		Py_INCREF(rob);
-	}
-#undef X_TLS_PROTOCOL
+	#define X_TLS_PROTOCOL(ORG, STD, SID, NAME, MAJOR_VERSION, MINOR_VERSION, OSSL_METHOD) \
+		if (p == ((intptr_t) OSSL_METHOD##_method) \
+			|| p ==((intptr_t) OSSL_METHOD##_client_method) \
+			|| p == ((intptr_t) OSSL_METHOD##_server_method)) \
+			rob = Py_BuildValue("(ssi)sii", #ORG, #STD, SID, #NAME, MAJOR_VERSION, MINOR_VERSION); \
+		else
+		X_TLS_PROTOCOLS()
+		{
+			rob = Py_None;
+			Py_INCREF(rob);
+		}
+	#undef X_TLS_PROTOCOL
 
 	return(rob);
 }
@@ -1342,14 +1369,16 @@ transport_get_peer_certificate(PyObj self, void *_)
 static PyGetSetDef transport_getset[] = {
 	{"protocol", transport_get_protocol, NULL,
 		PyDoc_STR(
-"The protocol used by the Transport.\n"
-)},
+			"The protocol used by the Transport.\n"
+		)
+	},
+
 	{"peer_certificate", transport_get_peer_certificate, NULL,
 		PyDoc_STR(
-"peer_certificate\n\n"
-"Get the peer certificate. If the Transport has yet to receive it, :py:obj:`None` will be returned."
-"\n"
-)},
+			"Get the peer certificate. If the Transport has yet to receive it, "
+			":py:obj:`None` will be returned."
+		)
+	},
 	{NULL,},
 };
 
@@ -1378,6 +1407,7 @@ transport_dealloc(PyObj self)
 
 	if (mp->ossl_breads != NULL)
 		BIO_free(mp->ossl_breads);
+
 	if (mp->ossl_bwrites != NULL)
 		BIO_free(mp->ossl_bwrites);
 
@@ -1397,50 +1427,49 @@ transport_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	return((PyObj) create_tls_state(subtype, ctx));
 }
 
-PyDoc_STRVAR(transport_doc,
-"OpenSSL Secure Transfer State.");
+PyDoc_STRVAR(transport_doc, "OpenSSL Secure Transfer State.");
 
 static PyTypeObject
 TransportType = {
 	PyVarObject_HEAD_INIT(NULL, 0)
-	QPATH("Transport"),			/* tp_name */
-	sizeof(struct Transport),	/* tp_basicsize */
-	0,									/* tp_itemsize */
-	transport_dealloc,			/* tp_dealloc */
-	NULL,								/* tp_print */
-	NULL,								/* tp_getattr */
-	NULL,								/* tp_setattr */
-	NULL,								/* tp_compare */
-	transport_repr,				/* tp_repr */
-	NULL,								/* tp_as_number */
-	NULL,								/* tp_as_sequence */
-	NULL,								/* tp_as_mapping */
-	NULL,								/* tp_hash */
-	NULL,								/* tp_call */
-	NULL,								/* tp_str */
-	NULL,								/* tp_getattro */
-	NULL,								/* tp_setattro */
-	NULL,								/* tp_as_buffer */
+	QPATH("Transport"),             /* tp_name */
+	sizeof(struct Transport),       /* tp_basicsize */
+	0,                              /* tp_itemsize */
+	transport_dealloc,              /* tp_dealloc */
+	NULL,                           /* tp_print */
+	NULL,                           /* tp_getattr */
+	NULL,                           /* tp_setattr */
+	NULL,                           /* tp_compare */
+	transport_repr,                 /* tp_repr */
+	NULL,                           /* tp_as_number */
+	NULL,                           /* tp_as_sequence */
+	NULL,                           /* tp_as_mapping */
+	NULL,                           /* tp_hash */
+	NULL,                           /* tp_call */
+	NULL,                           /* tp_str */
+	NULL,                           /* tp_getattro */
+	NULL,                           /* tp_setattro */
+	NULL,                           /* tp_as_buffer */
 	Py_TPFLAGS_BASETYPE|
-	Py_TPFLAGS_DEFAULT,			/* tp_flags */
-	transport_doc,					/* tp_doc */
-	NULL,								/* tp_traverse */
-	NULL,								/* tp_clear */
-	NULL,								/* tp_richcompare */
-	0,									/* tp_weaklistoffset */
-	NULL,								/* tp_iter */
-	NULL,								/* tp_iternext */
-	transport_methods,			/* tp_methods */
-	transport_members,			/* tp_members */
-	transport_getset,				/* tp_getset */
-	NULL,								/* tp_base */
-	NULL,								/* tp_dict */
-	NULL,								/* tp_descr_get */
-	NULL,								/* tp_descr_set */
-	0,									/* tp_dictoffset */
-	NULL,								/* tp_init */
-	NULL,								/* tp_alloc */
-	transport_new,					/* tp_new */
+	Py_TPFLAGS_DEFAULT,             /* tp_flags */
+	transport_doc,                  /* tp_doc */
+	NULL,                           /* tp_traverse */
+	NULL,                           /* tp_clear */
+	NULL,                           /* tp_richcompare */
+	0,                              /* tp_weaklistoffset */
+	NULL,                           /* tp_iter */
+	NULL,                           /* tp_iternext */
+	transport_methods,              /* tp_methods */
+	transport_members,              /* tp_members */
+	transport_getset,               /* tp_getset */
+	NULL,                           /* tp_base */
+	NULL,                           /* tp_dict */
+	NULL,                           /* tp_descr_get */
+	NULL,                           /* tp_descr_set */
+	0,                              /* tp_dictoffset */
+	NULL,                           /* tp_init */
+	NULL,                           /* tp_alloc */
+	transport_new,                  /* tp_new */
 };
 
 static PyObj
@@ -1453,10 +1482,9 @@ METHODS() = {
 	{"nulls",
 		(PyCFunction) nulls, METH_O,
 		PyDoc_STR(
-":returns: \n"
-"\n"
-"doc."
-)},
+			"Returns None. XXX: Remove?"
+		)
+	},
 	{NULL,}
 };
 
@@ -1543,22 +1571,20 @@ INIT(PyDoc_STR("OpenSSL\n"))
 	/*
 	 * Initialize Transit types.
 	 */
-#define ID(NAME) \
-	if (PyType_Ready((PyTypeObject *) &( NAME##Type ))) \
-		goto error; \
-	if (PyModule_AddObject(mod, #NAME, (PyObj) &( NAME##Type )) < 0) \
-		goto error;
-	PYTHON_TYPES()
-#undef ID
+	#define ID(NAME) \
+		if (PyType_Ready((PyTypeObject *) &( NAME##Type ))) \
+			goto error; \
+		if (PyModule_AddObject(mod, #NAME, (PyObj) &( NAME##Type )) < 0) \
+			goto error;
+		PYTHON_TYPES()
+	#undef ID
 
 	return(mod);
-error:
-	DROP_MODULE(mod);
-	return(NULL);
+
+	error:
+		DROP_MODULE(mod);
+		return(NULL);
 }
-/*
- * vim: ts=3:sw=3:noet:
- */
 #if 0
 """
 #endif

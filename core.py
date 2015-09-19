@@ -37,7 +37,7 @@ class KeyError(ContextError):
 
 class CertificateError(ContextError):
 	"""
-	A certificate could not be loaded. Normally
+	A certificate could not be loaded.
 	"""
 
 class InvalidAuthorityError(ContextError):
