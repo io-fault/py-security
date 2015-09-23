@@ -141,16 +141,40 @@ static PyTypeObject ContextType, TransportType;
 #define GetSize(pb) (pb.len)
 
 /*
+ * Prompting is rather inappropriate from a library;
+ * this callback is used throughout the source to manage
+ * the encryption key of a certificate or private key.
+ */
+struct password_parameter {
+	char *words;
+	Py_ssize_t length;
+};
+
+/*
+ * Callback used to parameterize the password.
+ */
+static int
+password_parameter(char *buf, int size, int rwflag, void *u)
+{
+	struct password_parameter *pwp = u;
+
+	strncpy(buf, pwp->words, (size_t) size);
+	return((int) pwp->length);
+}
+
+/*
  * OpenSSL doesn't provide us with an X-Macro of any sort, so hand add as needed.
- * Might have to probe... =\
+ * Might have to rely on some probes at some point... =\
  *
  * ORG, TYPE, ID, NAME, VERSION, OSSL_FRAGMENT
  */
 #define X_TLS_PROTOCOLS() \
-	X_TLS_PROTOCOL(ietf.org, RFC, 6101, SSL, 3, 0, SSLv23)  \
-	X_TLS_PROTOCOL(ietf.org, RFC, 2246, TLS, 1, 0, TLSv1)   \
-	X_TLS_PROTOCOL(ietf.org, RFC, 4346, TLS, 1, 1, TLSv1_1) \
-	X_TLS_PROTOCOL(ietf.org, RFC, 5246, TLS, 1, 2, TLSv1_2)
+	X_TLS_PROTOCOL(ietf.org, RFC, 2246, TLS,  1, 0, TLSv1)    \
+	X_TLS_PROTOCOL(ietf.org, RFC, 4346, TLS,  1, 1, TLSv1_1)  \
+	X_TLS_PROTOCOL(ietf.org, RFC, 5246, TLS,  1, 2, TLSv1_2)  \
+	X_TLS_PROTOCOL(ietf.org, RFC, 6101, SSL,  3, 0, SSLv23)   \
+	X_TLS_PROTOCOL(ietf.org, RFC, 4347, DTLS, 1, 0, DTLSv1)   \
+	X_TLS_PROTOCOL(ietf.org, RFC, 6347, DTLS, 1, 2, DTLSv1_2)
 
 #define X_CERTIFICATE_TYPES() \
 	X_CERTIFICATE_TYPE(ietf.org, RFC, 5280, X509)
@@ -318,8 +342,10 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 	return(tls);
 
 	fail:
+	{
 		Py_DECREF(tls);
 		return(NULL);
+	}
 }
 
 static int
@@ -422,22 +448,22 @@ check_result(Transport tls, int result)
 static int NAME(context_t ctx, PyObj certificates) \
 { \
 	PyObj ob, pi; \
-\
+	\
 	pi = PyObject_GetIter(certificates); \
 	if (pi == NULL) \
 		return(0); \
-\
+	\
 	ob = PyIter_Next(pi); \
 	if (PyErr_Occurred()) \
 		goto py_fail; \
-\
+	\
 	if (ob != NULL) \
 	{ \
 		certificate_t cert; \
-\
+		\
 		cert = load_pem_certificate(ob, NULL, NULL); /* XXX: select type */ \
 		Py_DECREF(ob); \
-\
+		\
 		if (cert == NULL) \
 		{ \
 			if (PyErr_Occurred()) \
@@ -445,59 +471,89 @@ static int NAME(context_t ctx, PyObj certificates) \
 			else \
 				goto ossl_fail; \
 		} \
-\
+		\
 		if (!INITIAL(ctx, cert)) \
 			goto ossl_fail; \
-\
+		\
 		while ((ob = PyIter_Next(pi))) \
 		{ \
 			if (PyErr_Occurred()) \
 				goto py_fail; \
-\
+			\
 			cert = load_pem_certificate(ob, NULL, NULL); \
 			Py_DECREF(ob); \
-\
+			\
 			if (cert == NULL) \
 				goto ossl_fail; \
 			if (!SUBSEQUENT(ctx, cert)) \
 				goto ossl_fail; \
 		} \
 	} \
-\
+	\
 	Py_DECREF(pi); \
 	return(1); \
-\
-ossl_fail: \
-	PyErr_SetString(PyExc_RuntimeError, "ossl fail"); \
-py_fail: \
-	Py_DECREF(pi); \
-	return(0); \
+	\
+	ossl_fail: \
+		PyErr_SetString(PyExc_RuntimeError, "ossl fail"); \
+	py_fail: \
+		Py_DECREF(pi); \
+		return(0); \
 }
 
 CERT_INIT_LOOP(load_certificate_chain, SSL_CTX_use_certificate, SSL_CTX_add_extra_chain_cert)
 CERT_INIT_LOOP(load_client_requirements, SSL_CTX_add_client_CA, SSL_CTX_add_client_CA)
 
-/* void SSL_CTX_flush_sessions(SSL_CTX *s, long t); */
-
-/*
- * certificate_rallocate() - create a new Transport object using the security context
- */
 static PyObj
-certificate_open(PyObj subtype)
+certificate_open(PyTypeObject *subtype, PyObj args, PyObj kw)
 {
-	Certificate crt;
+	static char *kwlist[] = {
+		"path",
+		"password",
+		NULL
+	};
 
-	Py_RETURN_NONE;
+	struct password_parameter pwp = {"", 0};
+	char *path = NULL;
+	FILE *fp = NULL;
+	Certificate cert;
+
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "s|s#", kwlist, &path, &(pwp.words), &(pwp.length)))
+		return(NULL);
+
+	cert = (Certificate) subtype->tp_alloc(subtype, 0);
+	if (cert == NULL)
+		return(NULL);
+
+	fp = fopen(path, "rb");
+	if (fp == NULL)
+	{
+		PyErr_SetFromErrno(PyExc_OSError);
+		Py_DECREF(cert);
+		return(NULL);
+	}
+
+	cert->ossl_crt = PEM_read_X509(fp, NULL, password_parameter, &pwp);
+	if (cert->ossl_crt == NULL)
+		goto ossl_error;
+
+	return((PyObj) cert);
+
+	ossl_error:
+		set_openssl_error("Error");
+	fail:
+	{
+		Py_DECREF(cert);
+		return(NULL);
+	}
 }
 
 static PyMethodDef
 certificate_methods[] = {
 	{"open", (PyCFunction) certificate_open,
-		METH_CLASS|METH_NOARGS, PyDoc_STR(
-"open()\n\n"
-"Read a certificate directly from the filesystem."
-"\n"
-)},
+		METH_CLASS|METH_VARARGS|METH_KEYWORDS, PyDoc_STR(
+			"Read a certificate directly from the filesystem.\n"
+		)
+	},
 
 	{NULL,},
 };
@@ -511,7 +567,7 @@ certificate_members[] = {
 	X509_REQ_get_version
 	X509_REQ_get_subject_name
 	X509_REQ_extract_key
- */
+*/
 /*
 	X509_CRL_get_version(x)
 	X509_CRL_get_lastUpdate(x)
@@ -563,6 +619,7 @@ seq_from_names(X509_NAME *n)
 		PyObj val, robi = NULL;
 		ASN1_OBJECT *iob;
 		int nid;
+		const char *name;
 
 		item = X509_NAME_get_entry(n, i);
 		iob = X509_NAME_ENTRY_get_object(item);
@@ -575,8 +632,9 @@ seq_from_names(X509_NAME *n)
 		}
 
 		nid = OBJ_obj2nid(iob);
+		name = OBJ_nid2ln(nid);
 
-		robi = Py_BuildValue("(iO)", nid, val);
+		robi = Py_BuildValue("(sO)", name, val);
 
 		if (robi == NULL || PyList_Append(rob, robi))
 		{
@@ -609,16 +667,17 @@ str_from_asn1_time(ASN1_TIME *t)
 
 #define CERTIFICATE_PROPERTIES() \
 	CERT_PROPERTY(not_before_string, \
-		"The 'notBefore' field as a UNIX timestamp", X509_get_notBefore, str_from_asn1_time) \
+		"The 'notBefore' field as a string.", X509_get_notBefore, str_from_asn1_time) \
 	CERT_PROPERTY(not_after_string, \
-		"The 'notAfter' field as a UNIX timestamp", X509_get_notAfter, str_from_asn1_time) \
+		"The 'notAfter' field as a string.", X509_get_notAfter, str_from_asn1_time) \
 	CERT_PROPERTY(signature_type, \
 		"The type of used to sign the key.", X509_extract_key, key_from_ossl_key) \
 	CERT_PROPERTY(subject, \
-		"The raw subject data of the cerficate.", X509_get_subject_name, seq_from_names) \
+		"The subject data of the cerficate.", X509_get_subject_name, seq_from_names) \
 	CERT_PROPERTY(public_key, \
 		"The public key provided by the certificate.", X509_extract_key, key_from_ossl_key) \
-	CERT_PROPERTY(version, "The Format Version", X509_get_version, PyLong_FromLong)
+	CERT_PROPERTY(version, \
+		"The Format Version", X509_get_version, PyLong_FromLong)
 
 #define CERT_PROPERTY(NAME, DOC, GET, CONVERT) \
 	static PyObj certificate_get_##NAME(PyObj crt) \
@@ -630,12 +689,23 @@ str_from_asn1_time(ASN1_TIME *t)
 	CERTIFICATE_PROPERTIES()
 #undef CERT_PROPERTY
 
-static PyGetSetDef certificate_getset[] = {
-#define CERT_PROPERTY(NAME, DOC, UNUSED1, UNUSED2) \
-	{#NAME, certificate_get_##NAME, NULL, PyDoc_STR(DOC)},
+static PyObj
+certificate_get_type(PyObj self)
+{
+	return (PyUnicode_FromString("x509"));
+}
 
-CERTIFICATE_PROPERTIES()
-#undef CERT_PROPERTY
+static PyGetSetDef certificate_getset[] = {
+	#define CERT_PROPERTY(NAME, DOC, UNUSED1, UNUSED2) \
+		{#NAME, certificate_get_##NAME, NULL, PyDoc_STR(DOC)},
+
+		CERTIFICATE_PROPERTIES()
+	#undef CERT_PROPERTY
+
+	{"type",
+		certificate_get_type, NULL,
+		PyDoc_STR("certificate type; always X509."),
+	},
 	{NULL,},
 };
 
@@ -796,6 +866,20 @@ context_rallocate(PyObj self)
 	return((PyObj) tls);
 }
 
+static PyObj
+context_void_sessions(PyObj self, PyObj args)
+{
+	Context ctx = (Context) self;
+	long t = 0;
+
+	if (!PyArg_ParseTuple(args, "l", &t))
+		return(NULL);
+
+	SSL_CTX_flush_sessions(ctx->tls_context, t);
+
+	Py_RETURN_NONE;
+}
+
 static PyMethodDef
 context_methods[] = {
 	{"rallocate", (PyCFunction) context_rallocate,
@@ -805,6 +889,12 @@ context_methods[] = {
 		)
 	},
 
+	{"void_sessions", (PyCFunction) context_void_sessions,
+		METH_VARARGS, PyDoc_STR(
+			"Remove the sessions from the context that have expired "
+			"according to the given time parameter."
+		)
+	},
 	{NULL,},
 };
 
@@ -910,7 +1000,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 			SSL_CTX_set_options(ctx->tls_context, SSL_OP_NO_SSLv2);
 		}
 	#else
-
+		/* Default is to disallow v2 */
 	#endif
 
 	if (!SSL_CTX_set_cipher_list(ctx->tls_context, ciphers))
@@ -955,8 +1045,10 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	ossl_error:
 		set_openssl_error("ContextError");
 	fail:
+	{
 		Py_XDECREF(ctx);
 		return(NULL);
+	}
 }
 
 PyDoc_STRVAR(context_doc,
@@ -1569,7 +1661,7 @@ INIT(PyDoc_STR("OpenSSL\n"))
 	}
 
 	/*
-	 * Initialize Transit types.
+	 * Initialize types.
 	 */
 	#define ID(NAME) \
 		if (PyType_Ready((PyTypeObject *) &( NAME##Type ))) \

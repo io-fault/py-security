@@ -1,6 +1,8 @@
 from ...context import import_extension_module
+libraries = ['ssl']
 import_extension_module()
 del import_extension_module
+del libraries
 
 if False:
 	import sys
