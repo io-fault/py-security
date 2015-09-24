@@ -32,6 +32,8 @@ csource = """
 
 #include <openssl/x509.h>
 #include <openssl/pem.h>
+#include <openssl/rsa.h>
+#include <openssl/evp.h>
 
 #include <openssl/objects.h>
 
@@ -99,6 +101,12 @@ typedef enum {
 
 static PyObj version_info = NULL, version_str = NULL;
 
+struct Key {
+	PyObject_HEAD
+	pki_key_t lib_key;
+};
+typedef struct Key *Key;
+
 struct Certificate {
 	PyObject_HEAD
 	certificate_t ossl_crt;
@@ -135,7 +143,7 @@ struct Transport {
 };
 typedef struct Transport *Transport;
 
-static PyTypeObject ContextType, TransportType;
+static PyTypeObject KeyType, CertificateType, ContextType, TransportType;
 
 #define GetPointer(pb) (pb.buf)
 #define GetSize(pb) (pb.len)
@@ -193,6 +201,14 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 #define X_CA_EVENTS()        \
 	X_CA_EVENT(CSR, REQUEST) \
 	X_CA_EVENT(CRL, REVOKE)
+
+#define X_TLS_METHODS()               \
+	X_TLS_METHOD("TLS", TLS)          \
+	X_TLS_METHOD("TLS-1.0", TLSv1)    \
+	X_TLS_METHOD("TLS-1.1", TLSv1_1)  \
+	X_TLS_METHOD("TLS-1.2", TLSv1_2)  \
+	X_TLS_METHOD("SSL-3.0", SSLv3)    \
+	X_TLS_METHOD("compat",  SSLv23)
 
 /*
  * Function Set to load Security Elements.
@@ -292,6 +308,297 @@ set_openssl_error(const char *exc_name)
 	err = pop_openssl_error();
 	PyErr_SetObject(exc, err);
 }
+
+static PyObj
+key_generate_rsa(PyTypeObject *subtype, PyObj args, PyObj kw)
+{
+	static char *kwlist[] = {
+		"bits",
+		"engine",
+		NULL
+	};
+	unsigned long bits = 2048;
+
+	EVP_PKEY_CTX *ctx = NULL;
+	EVP_PKEY *pkey = NULL;
+	Key k;
+
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "|ks", kwlist, &bits))
+		return(NULL);
+
+	ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, NULL);
+	if (ctx == NULL)
+	{
+		goto lib_error;
+	}
+
+	if (EVP_PKEY_keygen_init(ctx) <= 0)
+	{
+		goto lib_error;
+	}
+
+	if (EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, bits) <= 0)
+	{
+		goto lib_error;
+	}
+
+	if (EVP_PKEY_keygen(ctx, &pkey) <= 0)
+	{
+		goto lib_error;
+	}
+
+	EVP_PKEY_CTX_free(ctx);
+	ctx = NULL;
+
+	k = (Key) subtype->tp_alloc(subtype, 0);
+	if (k == NULL)
+	{
+		return(NULL);
+	}
+	else
+	{
+		k->lib_key = pkey;
+	}
+
+	return(k);
+
+	lib_error:
+	{
+		if (ctx != NULL)
+			EVP_PKEY_CTX_free(ctx);
+
+		set_openssl_error("Error");
+		return(NULL);
+	}
+}
+
+static PyObj
+key_encrypt(PyObj self, PyObj data)
+{
+	Py_RETURN_NONE;
+}
+
+static PyObj
+key_decrypt(PyObj self, PyObj data)
+{
+	Py_RETURN_NONE;
+}
+
+static PyObj
+key_sign(PyObj self, PyObj data)
+{
+	/* Private Key */
+	Py_RETURN_NONE;
+}
+
+static PyObj
+key_verify(PyObj self, PyObj data)
+{
+	/* Public Key */
+	Py_RETURN_NONE;
+}
+
+static PyMethodDef
+key_methods[] = {
+	{"generate_rsa", (PyCFunction) key_generate_rsa,
+		METH_CLASS|METH_VARARGS|METH_KEYWORDS, PyDoc_STR(
+			"Generate an Key [Usually a pair]."
+		)
+	},
+
+	{"encrypt", (PyCFunction) key_encrypt,
+		METH_O, PyDoc_STR(
+			"Encrypt the given binary data."
+		)
+	},
+
+	{"decrypt", (PyCFunction) key_decrypt,
+		METH_O, PyDoc_STR(
+			"Decrypt the given binary data."
+		)
+	},
+
+	{"sign", (PyCFunction) key_sign,
+		METH_O, PyDoc_STR(
+			"Sign the given binary data."
+		)
+	},
+
+	{"verify", (PyCFunction) key_verify,
+		METH_VARARGS, PyDoc_STR(
+			"Verify the signature of the binary data."
+		)
+	},
+
+	{NULL,},
+};
+
+static const char *
+key_type_string(Key k)
+{
+	switch (EVP_PKEY_type(k->lib_key->type))
+	{
+		case EVP_PKEY_RSA:
+			return "rsa";
+		break;
+
+		case EVP_PKEY_DSA:
+			return "dsa";
+		break;
+
+		case EVP_PKEY_DH:
+			return "dh";
+		break;
+
+		case EVP_PKEY_EC:
+			return "ec";
+		break;
+	}
+}
+
+static PyObj
+key_get_type(PyObj self)
+{
+	Key k = (Key) self;
+
+	return(PyUnicode_FromString(key_type_string(k)));
+}
+
+static PyMethodDef
+key_getset[] = {
+	{"type",
+		key_get_type, NULL,
+		PyDoc_STR("certificate type; always X509."),
+	},
+
+	{NULL,},
+};
+
+static void
+key_dealloc(PyObj self)
+{
+	Key k = (Key) self;
+	EVP_PKEY_free(k->lib_key);
+}
+
+static PyObj
+key_repr(PyObj self)
+{
+	PyObj rob;
+	Key k = (Key) self;
+
+	rob = PyUnicode_FromFormat("<openssl.Key[%s] %p>", key_type_string(k), k);
+	return(rob);
+}
+
+static PyObj
+key_str(PyObj self)
+{
+	Key k = (Key) self;
+	PyObj rob = NULL;
+	BIO *out;
+	char *ptr = NULL;
+	Py_ssize_t size = 0;
+
+	out = BIO_new(BIO_s_mem());
+	if (out == NULL)
+	{
+		PyErr_SetString(PyExc_MemoryError, "could not allocate memory BIO for Key");
+		return(NULL);
+	}
+
+	if (EVP_PKEY_print_public(out, k->lib_key, 0, NULL) <= 0)
+		goto error;
+	if (EVP_PKEY_print_private(out, k->lib_key, 0, NULL) <= 0)
+		goto error;
+	if (EVP_PKEY_print_params(out, k->lib_key, 0, NULL) <= 0)
+		goto error;
+
+	size = (Py_ssize_t) BIO_get_mem_data(out, &ptr);
+	rob = Py_BuildValue("s#", ptr, size);
+
+	BIO_free(out);
+
+	return(rob);
+
+	error:
+	{
+		set_openssl_error("Error");
+
+		BIO_free(out);
+		return(NULL);
+	}
+}
+
+static PyObj
+key_new(PyTypeObject *subtype, PyObj args, PyObj kw)
+{
+	static char *kwlist[] = {"pem", NULL,};
+	PyObj pem;
+	Key k;
+
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "O", kwlist, &pem))
+		return(NULL); XCOVERAGE
+
+	k = (Key) subtype->tp_alloc(subtype, 0);
+	if (k == NULL)
+	{
+		return(NULL);
+	}
+
+	Py_RETURN_NONE;
+
+	ossl_error:
+		set_openssl_error("Error");
+	fail:
+		Py_XDECREF(k);
+		return(NULL);
+}
+
+PyDoc_STRVAR(key_doc, "OpenSSL EVP_PKEY objects.");
+
+static PyTypeObject
+KeyType = {
+	PyVarObject_HEAD_INIT(NULL, 0)
+	QPATH("Key"),                   /* tp_name */
+	sizeof(struct Key),             /* tp_basicsize */
+	0,                              /* tp_itemsize */
+	key_dealloc,                    /* tp_dealloc */
+	NULL,                           /* tp_print */
+	NULL,                           /* tp_getattr */
+	NULL,                           /* tp_setattr */
+	NULL,                           /* tp_compare */
+	key_repr,                       /* tp_repr */
+	NULL,                           /* tp_as_number */
+	NULL,                           /* tp_as_sequence */
+	NULL,                           /* tp_as_mapping */
+	NULL,                           /* tp_hash */
+	NULL,                           /* tp_call */
+	key_str,                        /* tp_str */
+	NULL,                           /* tp_getattro */
+	NULL,                           /* tp_setattro */
+	NULL,                           /* tp_as_buffer */
+	Py_TPFLAGS_BASETYPE|
+	Py_TPFLAGS_DEFAULT,             /* tp_flags */
+	key_doc,                        /* tp_doc */
+	NULL,                           /* tp_traverse */
+	NULL,                           /* tp_clear */
+	NULL,                           /* tp_richcompare */
+	0,                              /* tp_weaklistoffset */
+	NULL,                           /* tp_iter */
+	NULL,                           /* tp_iternext */
+	key_methods,                    /* tp_methods */
+	NULL,                           /* tp_members */
+	key_getset,                     /* tp_getset */
+	NULL,                           /* tp_base */
+	NULL,                           /* tp_dict */
+	NULL,                           /* tp_descr_get */
+	NULL,                           /* tp_descr_set */
+	0,                              /* tp_dictoffset */
+	NULL,                           /* tp_init */
+	NULL,                           /* tp_alloc */
+	key_new,                        /* tp_new */
+};
 
 /*
  * primary transport_new parts. Normally called by the Context methods.
@@ -766,12 +1073,21 @@ certificate_str(PyObj self)
 static PyObj
 certificate_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 {
-	static char *kwlist[] = {"pem", NULL,};
+	static char *kwlist[] = {
+		"pem",
+		"password",
+		NULL,
+	};
+	struct password_parameter pwp = {"", 0};
+
 	PyObj pem;
 	Certificate cert;
 
-	if (!PyArg_ParseTupleAndKeywords(args, kw, "O", kwlist, &pem))
-		return(NULL); XCOVERAGE
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "O|s#", kwlist,
+			&pem,
+			&(pwp.words), &(pwp.length)
+		))
+		return(NULL);
 
 	cert = (Certificate) subtype->tp_alloc(subtype, 0);
 	if (cert == NULL)
@@ -779,7 +1095,7 @@ certificate_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		return(NULL); XCOVERAGE
 	}
 
-	cert->ossl_crt = load_pem_certificate(pem, NULL, NULL);
+	cert->ossl_crt = load_pem_certificate(pem, password_parameter, &pwp);
 	if (cert->ossl_crt == NULL)
 		goto ossl_error;
 
@@ -926,6 +1242,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 {
 	static char *kwlist[] = {
 		"key",
+		"password",
 		"certificates",
 		"requirements",
 		"protocol", /* openssl "method" */
@@ -934,6 +1251,8 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		NULL,
 	};
 
+	struct password_parameter pwp = {"", 0};
+
 	Context ctx;
 
 	PyObj key_ob = NULL;
@@ -941,52 +1260,63 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	PyObj requirements = NULL; /* iterable */
 
 	char *ciphers = SHADE_OPENSSL_CIPHERS;
-	char *protocol = "compat";
+	char *protocol = "TLS";
 
 	int allow_ssl_v2 = 0;
 
 	if (!PyArg_ParseTupleAndKeywords(args, kw,
 		"|OOOssp", kwlist,
 		&key_ob,
+		&(pwp.words), &(pwp.length),
 		&certificates,
 		&requirements,
 		&protocol,
 		&ciphers,
 		&allow_ssl_v2
 	))
-		return(NULL); XCOVERAGE
+		return(NULL);
 
 	ctx = (Context) subtype->tp_alloc(subtype, 0);
 	if (ctx == NULL)
-		return(NULL); XCOVERAGE
+		return(NULL);
 
 	/*
 	 * The key is checked and loaded later.
 	 */
 	ctx->tls_key_status = key_none;
+	ctx->tls_context = NULL;
 
-	if (strcmp(protocol, "TLS-1.2") == 0)
+	if (requirements == NULL)
 	{
-		ctx->tls_context = SSL_CTX_new(TLSv1_2_method());
-	}
-	else if (strcmp(protocol, "TLS-1.1") == 0)
-	{
-		ctx->tls_context = SSL_CTX_new(TLSv1_1_method());
-	}
-	else if (strcmp(protocol, "TLS-1.0") == 0)
-	{
-		ctx->tls_context = SSL_CTX_new(TLSv1_method());
-	}
-	else if (strcmp(protocol, "SSL-3.0") == 0)
-	{
-		ctx->tls_context = SSL_CTX_new(SSLv3_method());
-	}
-	else if (strcmp(protocol, "compat") == 0)
-	{
-		ctx->tls_context = SSL_CTX_new(SSLv23_method());
+		/* client positioning */
+
+		#define X_TLS_METHOD(STRING, PREFIX) \
+			else if (strcmp(STRING, protocol) == 0) \
+			ctx->tls_context = SSL_CTX_new(PREFIX##_client_method());
+
+			if (0)
+			X_TLS_METHODS()
+
+		#undef X_TLS_METHOD
 	}
 	else
 	{
+		/* server positioning */
+
+		#define X_TLS_METHOD(STRING, PREFIX) \
+			else if (strcmp(STRING, protocol) == 0) \
+				ctx->tls_context = SSL_CTX_new(PREFIX##_server_method());
+
+			if (0)
+			X_TLS_METHODS()
+
+		#undef X_TLS_METHOD
+	}
+
+	if (ctx->tls_context == NULL)
+	{
+		/* XXX: check for openssl failure */
+
 		PyErr_SetString(PyExc_TypeError, "invalid 'protocol' argument");
 		goto fail;
 	}
@@ -1000,7 +1330,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 			SSL_CTX_set_options(ctx->tls_context, SSL_OP_NO_SSLv2);
 		}
 	#else
-		/* Default is to disallow v2 */
+		/* No, SSL_OP_NO_SSLv2 defined by openssl headers */
 	#endif
 
 	if (!SSL_CTX_set_cipher_list(ctx->tls_context, ciphers))
@@ -1025,7 +1355,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	{
 		pki_key_t key;
 
-		key = load_pem_private_key(key_ob, NULL, NULL);
+		key = load_pem_private_key(key_ob, password_parameter, &pwp);
 		if (key == NULL)
 		{
 			goto ossl_error;
@@ -1052,7 +1382,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 }
 
 PyDoc_STRVAR(context_doc,
-	"OpenSSL security context objects");
+	"OpenSSL transport security context.");
 
 static PyTypeObject
 ContextType = {
@@ -1194,7 +1524,8 @@ transport_enciphered_write_eof(PyObj self, PyObj buffer)
 }
 
 /*
- *
+ * Write enciphered protocol data into the transport.
+ * Either for deciphered reads or for internal protocol management.
  */
 static PyObj
 transport_write_enciphered(PyObj self, PyObj buffer)
@@ -1240,6 +1571,9 @@ transport_write_enciphered(PyObj self, PyObj buffer)
 	return(PyLong_FromLong((long) xfer));
 }
 
+/*
+ * Read deciphered data from the transport.
+ */
 static PyObj
 transport_read_deciphered(PyObj self, PyObj buffer)
 {
@@ -1248,7 +1582,7 @@ transport_read_deciphered(PyObj self, PyObj buffer)
 	int xfer;
 
 	if (PyObject_GetBuffer(buffer, &pb, PyBUF_WRITABLE))
-		return(NULL); XCOVERAGE
+		return(NULL);
 
 	xfer = SSL_read(tls->tls_state, GetPointer(pb), GetSize(pb));
 	if (xfer < 1)
@@ -1263,6 +1597,9 @@ transport_read_deciphered(PyObj self, PyObj buffer)
 	return(PyLong_FromLong((long) xfer));
 }
 
+/*
+ * Write deciphered data to be sent to the remote end.
+ */
 static PyObj
 transport_write_deciphered(PyObj self, PyObj buffer)
 {
@@ -1300,6 +1637,19 @@ transport_leak_session(PyObj self)
 }
 
 static PyObj
+transport_pending(PyObj self)
+{
+	Transport tls = (Transport) self;
+	int nbytes;
+	PyObj rob;
+
+	nbytes = SSL_pending(tls->tls_state);
+	rob = PyLong_FromLong((long) nbytes);
+
+	return(rob);
+}
+
+static PyObj
 transport_terminate(PyObj self)
 {
 	Transport tls = (Transport) self;
@@ -1330,6 +1680,12 @@ transport_methods[] = {
 		METH_NOARGS, PyDoc_STR(
 			"Force the transport's session to be leaked regardless of its shutdown state.\n"
 			"`<http://www.openssl.org/docs/ssl/SSL_set_shutdown.html>`_"
+		)
+	},
+
+	{"pending", (PyCFunction) transport_pending,
+		METH_NOARGS, PyDoc_STR(
+			"Return the number of bytes available for reading."
 		)
 	},
 
@@ -1451,11 +1807,27 @@ transport_get_peer_certificate(PyObj self, void *_)
 				free_certificate_t(c);
 			else
 				crt->ossl_crt = c;
+
 			return(crt);
 		}
 	}
 
 	Py_RETURN_NONE;
+}
+
+static PyObj
+transport_get_terminated(PyObj self, void *_)
+{
+	Transport tls = (Transport) self;
+
+	if (SSL_RECEIVED_SHUTDOWN & SSL_get_shutdown(tls->tls_state))
+	{
+		Py_INCREF(Py_True);
+		return(Py_True);
+	}
+
+	Py_INCREF(Py_False);
+	return(Py_False);
 }
 
 static PyGetSetDef transport_getset[] = {
@@ -1470,6 +1842,10 @@ static PyGetSetDef transport_getset[] = {
 			"Get the peer certificate. If the Transport has yet to receive it, "
 			":py:obj:`None` will be returned."
 		)
+	},
+
+	{"terminated", transport_get_terminated, NULL,
+		PyDoc_STR("Whether the shutdown state has been *received*.")
 	},
 	{NULL,},
 };
@@ -1581,6 +1957,7 @@ METHODS() = {
 };
 
 #define PYTHON_TYPES() \
+	ID(Key) \
 	ID(Certificate) \
 	ID(Context) \
 	ID(Transport)

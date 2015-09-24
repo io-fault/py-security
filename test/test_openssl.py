@@ -105,6 +105,14 @@ def test_no_certificates(test):
 	del ctx
 	test.garbage(0)
 
+def test_Key_generate_rsa(test):
+	k = openssl.Key.generate_rsa(1024)
+	print(str(k))
+	print(repr(k))
+	print(k.type)
+	del k
+	test.garbage(0)
+
 def test_io(test):
 	sctx = openssl.Context(key = key, certificates = [certificate])
 	cctx = openssl.Context(certificates = [certificate])
@@ -112,6 +120,7 @@ def test_io(test):
 	client = cctx.rallocate()
 	server = sctx.rallocate()
 
+	# Negotiation.
 	b = bytearray(2048)
 	q = client.read_enciphered(b)
 	server.write_enciphered(b[:q])
