@@ -97,9 +97,9 @@ def test_certificate(test):
 def test_no_certificates(test):
 	ctx = openssl.Context()
 	test/ctx / openssl.Context
-	tls = ctx.rallocate()
+	tls = ctx.connect()
 	test/tls / openssl.Transport
-	tls = ctx.rallocate()
+	tls = ctx.accept()
 	test/tls / openssl.Transport
 	del tls
 	del ctx
@@ -117,50 +117,27 @@ def test_io(test):
 	sctx = openssl.Context(key = key, certificates = [certificate])
 	cctx = openssl.Context(certificates = [certificate])
 
-	client = cctx.rallocate()
-	server = sctx.rallocate()
+	client = cctx.connect()
+	server = sctx.accept()
 
-	# Negotiation.
-	b = bytearray(2048)
-	q = client.read_enciphered(b)
-	server.write_enciphered(b[:q])
+	client_received = []
+	server_received = []
 
-	b = bytearray(2048)
-	q = server.read_enciphered(b)
-	client.write_enciphered(b[:q])
+	server_send_queue = [b'client message']
+	client_send_queue = [b'server message']
 
-	b = bytearray(2048)
-	q = client.read_enciphered(b)
-	server.write_enciphered(b[:q])
+	for x in range(4):
+		ciphertexts = client.encipher((client_send_queue.pop(0),) if client_send_queue else ())
+		plaintexts = server.decipher(ciphertexts)
+		server_received.extend(plaintexts)
+		ciphertexts = server.encipher((server_send_queue.pop(0),) if server_send_queue else ())
+		plaintexts = client.decipher(ciphertexts)
+		client_received.extend(plaintexts)
 
-	b = bytearray(2048)
-	q = server.read_enciphered(b)
-	client.write_enciphered(b[:q])
-
-	# server receives bar and client receives foo
-	server.write_deciphered(b'foo')
-	test/server.pending_enciphered_writes > 3
-	client.write_deciphered(b'bar')
-	test/client.pending_enciphered_writes > 3
-
-	b = bytearray(2048)
-	q = client.read_enciphered(b)
-	server.write_enciphered(b[:q])
-
-	b = bytearray(2048)
-	q = server.read_enciphered(b)
-	client.write_enciphered(b[:q])
-
-	test/client.pending_enciphered_writes == 0
-	test/client.pending_enciphered_reads == 0
-	test/server.pending_enciphered_writes == 0
-	test/server.pending_enciphered_reads == 0
-
-	print(server.protocol)
-
-	b = bytearray(1024)
-	test/b[:server.read_deciphered(b)] == b'bar'
-	test/b[:client.read_deciphered(b)] == b'foo'
+	test/len(server.output_queue) == 0
+	test/len(client.output_queue) == 0
+	test/client_received == [b'client message']
+	test/server_received == [b'server message']
 
 if __name__ == '__main__':
 	import sys; from ...development import libtest

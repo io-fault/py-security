@@ -42,11 +42,11 @@ csource = """
 #endif
 
 #if 0
-	#ifndef OSSL_NIDS
-	/*
-	 * OSSL_NIDS() is defined by the probe and pre-included.
-	 */
-		#error probe module did not render OSSL_NIDS template macro
+	#ifndef OPENSSL_NIDS
+		/*
+		 * OPENSSL_NIDS() is defined by the probe and pre-included.
+		 */
+		#error probe module did not render OPENSSL_NIDS template macro
 	#endif
 #endif
 
@@ -81,14 +81,14 @@ typedef EVP_PKEY *pki_key_t;
  * TLS parameter for keeping state with memory instead of sockets.
  */
 typedef struct {
-	BIO *ossl_breads;
-	BIO *ossl_bwrites;
+	BIO *reads;
+	BIO *writes;
 } memory_t;
 
 typedef enum {
 	tls_protocol_error = -3,     /* effectively terminated */
 	tls_remote_termination = -2, /* shutdown from remote */
-	tls_local_termination = -1,  /* shutdown from local request */
+	tls_local_termination = -1,  /* shutdown initiated locally */
 	tls_not_terminated = 0,
 	tls_terminating = 1,
 } termination_t;
@@ -109,7 +109,7 @@ typedef struct Key *Key;
 
 struct Certificate {
 	PyObject_HEAD
-	certificate_t ossl_crt;
+	certificate_t lib_crt;
 };
 typedef struct Certificate *Certificate;
 
@@ -120,29 +120,37 @@ struct Context {
 };
 typedef struct Context *Context;
 
+#define output_buffer_extend(tls, x) PyObject_CallMethod(tls->output_queue, "extend", "(O)", x)
+#define output_buffer_append(tls, x) PyObject_CallMethod(tls->output_queue, "append", "O", x)
+#define output_buffer_has_content(tls) PyObject_IsTrue(tls->output_queue)
+#define output_buffer_initial(tls) PySequence_GetItem(tls->output_queue, 0)
+#define output_buffer_pop(tls) PySequence_DelItem(tls->output_queue, 0)
+
+/* XXX: this should probably depend on a probe */
+/* Accessors for the read BIO and write BIO */
+#define Transport_GetReadBuffer(tls) (tls->tls_state->rbio)
+#define Transport_GetWriteBuffer(tls) (tls->tls_state->wbio)
+
 struct Transport {
 	PyObject_HEAD
 	Context ctx_object;
 
 	transport_t tls_state;
-	memory_t tls_memory;
 
-	termination_t tls_termination;
 	PyObj tls_protocol_error; /* dictionary or NULL (None) */
 
 	/*
 	 * NULL until inspected then cached until the Transport is terminated.
 	 */
 	PyObj tls_peer_certificate;
+	PyObj output_queue; /* when SSL_write is not possible */
 
-	/*
-	 * These are updated when I/O of any sort occurs and
-	 * provides a source for event signalling.
-	 */
-	unsigned long tls_pending_reads, tls_pending_writes;
+	termination_t tls_termination;
+	signed char tls_terminate; /* side being terminated. */
 };
 typedef struct Transport *Transport;
 
+static PyObj Queue; /* write buffer */
 static PyTypeObject KeyType, CertificateType, ContextType, TransportType;
 
 #define GetPointer(pb) (pb.buf)
@@ -174,7 +182,7 @@ password_parameter(char *buf, int size, int rwflag, void *u)
  * OpenSSL doesn't provide us with an X-Macro of any sort, so hand add as needed.
  * Might have to rely on some probes at some point... =\
  *
- * ORG, TYPE, ID, NAME, VERSION, OSSL_FRAGMENT
+ * ORG, TYPE, ID, NAME, VERSION, OPENSSL_FRAGMENT
  */
 #define X_TLS_PROTOCOLS() \
 	X_TLS_PROTOCOL(ietf.org, RFC, 2246, TLS,  1, 0, TLSv1)    \
@@ -203,7 +211,6 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 	X_CA_EVENT(CRL, REVOKE)
 
 #define X_TLS_METHODS()               \
-	X_TLS_METHOD("TLS", TLS)          \
 	X_TLS_METHOD("TLS-1.0", TLSv1)    \
 	X_TLS_METHOD("TLS-1.1", TLSv1_1)  \
 	X_TLS_METHOD("TLS-1.2", TLSv1_2)  \
@@ -213,7 +220,7 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 /*
  * Function Set to load Security Elements.
  */
-#define X_READ_OSSL_OBJECT(TYP, LOCAL_SYM, OSSL_CALL) \
+#define X_READ_OPENSSL_OBJECT(TYP, LOCAL_SYM, OPENSSL_CALL) \
 static TYP \
 LOCAL_SYM(PyObj buf, pem_password_cb *cb, void *cb_data) \
 { \
@@ -232,7 +239,7 @@ LOCAL_SYM(PyObj buf, pem_password_cb *cb, void *cb_data) \
 	} \
 	else \
 	{ \
-		element = OSSL_CALL(bio, NULL, cb, cb_data); \
+		element = OPENSSL_CALL(bio, NULL, cb, cb_data); \
 		BIO_free(bio); \
 	} \
 	\
@@ -243,10 +250,10 @@ LOCAL_SYM(PyObj buf, pem_password_cb *cb, void *cb_data) \
 /*
  * need a small abstraction
  */
-X_READ_OSSL_OBJECT(certificate_t, load_pem_certificate, PEM_read_bio_X509)
-X_READ_OSSL_OBJECT(pki_key_t, load_pem_private_key, PEM_read_bio_PrivateKey)
-X_READ_OSSL_OBJECT(pki_key_t, load_pem_public_key, PEM_read_bio_PUBKEY)
-#undef X_READ_OSSL_OBJECT
+X_READ_OPENSSL_OBJECT(certificate_t, load_pem_certificate, PEM_read_bio_X509)
+X_READ_OPENSSL_OBJECT(pki_key_t, load_pem_private_key, PEM_read_bio_PrivateKey)
+X_READ_OPENSSL_OBJECT(pki_key_t, load_pem_public_key, PEM_read_bio_PUBKEY)
+#undef X_READ_OPENSSL_OBJECT
 
 /*
  * OpenSSL uses a per-thread error queue, but
@@ -257,7 +264,7 @@ pop_openssl_error(void)
 {
 	PyObj rob;
 	int line = -1, flags = 0;
-	const char *lib, *func, *reason, *path, *data = NULL;
+	const char *lib, *func, *reason, *path, *data = NULL, *ldata;
 	unsigned long error_code;
 
 	error_code = ERR_get_error_line_data(&path, &line, &data, &flags);
@@ -266,19 +273,21 @@ pop_openssl_error(void)
 	func = ERR_func_error_string(error_code);
 	reason = ERR_reason_error_string(error_code);
 
-	if (lib[0] == '\0')
+	if (lib && lib[0] == '\0')
 		lib = NULL;
 
-	if (func[0] == '\0')
+	if (func && func[0] == '\0')
 		func = NULL;
 
-	if (reason[0] == '\0')
+	if (reason && reason[0] == '\0')
 		reason = NULL;
 
-	if (data[0] == '\0')
-		data = NULL;
+	if (data && data[0] == '\0')
+		ldata = NULL;
+	else
+		ldata = data;
 
-	if (path[0] == '\0')
+	if (path && path[0] == '\0')
 		path = NULL;
 
 	rob = Py_BuildValue(
@@ -287,7 +296,7 @@ pop_openssl_error(void)
 			"library", lib,
 			"function", func,
 			"reason", reason,
-			"data", data,
+			"data", ldata,
 			"path", path,
 			"line", line
 	);
@@ -303,6 +312,9 @@ set_openssl_error(const char *exc_name)
 {
 	PyObj err, exc = import_sibling("core", exc_name);
 	if (exc == NULL)
+		return;
+
+	if (ERR_peek_error() == 0)
 		return;
 
 	err = pop_openssl_error();
@@ -360,7 +372,7 @@ key_generate_rsa(PyTypeObject *subtype, PyObj args, PyObj kw)
 		k->lib_key = pkey;
 	}
 
-	return(k);
+	return((PyObj) k);
 
 	lib_error:
 	{
@@ -454,17 +466,19 @@ key_type_string(Key k)
 			return "ec";
 		break;
 	}
+
+	return "unknown";
 }
 
 static PyObj
-key_get_type(PyObj self)
+key_get_type(PyObj self, void *p)
 {
 	Key k = (Key) self;
 
 	return(PyUnicode_FromString(key_type_string(k)));
 }
 
-static PyMethodDef
+static PyGetSetDef
 key_getset[] = {
 	{"type",
 		key_get_type, NULL,
@@ -548,7 +562,7 @@ key_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 
 	Py_RETURN_NONE;
 
-	ossl_error:
+	lib_error:
 		set_openssl_error("Error");
 	fail:
 		Py_XDECREF(k);
@@ -608,10 +622,18 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 {
 	const static char *mem_err_str = "could not allocate memory BIO for secure Transport";
 	Transport tls;
+	BIO *rb, *wb;
 
 	tls = (Transport) typ->tp_alloc(typ, 0);
 	if (tls == NULL)
 		return(NULL); XCOVERAGE
+
+	tls->output_queue = PyObject_CallFunctionObjArgs(Queue, NULL);
+	if (tls->output_queue == NULL)
+	{
+		Py_DECREF(tls);
+		return(NULL);
+	}
 
 	tls->ctx_object = ctx;
 
@@ -630,21 +652,26 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 	 *
 	 * Unlike SSL_new error handling, be noisy about memory errors.
 	 */
-	tls->tls_memory.ossl_breads = BIO_new(BIO_s_mem());
-	if (tls->tls_memory.ossl_breads == NULL)
+	rb = BIO_new(BIO_s_mem());
+	wb = BIO_new(BIO_s_mem());
+
+	if (rb == NULL || wb == NULL)
 	{
+		/* even if the error handling was separated, we'd have redundancy */
+		if (rb)
+			BIO_free(rb);
+		if (wb)
+			BIO_free(wb);
+
 		PyErr_SetString(PyExc_MemoryError, mem_err_str);
 		goto fail;
 	}
 
-	tls->tls_memory.ossl_bwrites = BIO_new(BIO_s_mem());
-	if (tls->tls_memory.ossl_bwrites == NULL)
-	{
-		PyErr_SetString(PyExc_MemoryError, mem_err_str);
-		goto fail;
-	}
+	/* disables eof condition on the memory bio */
+	BIO_set_mem_eof_return(rb, -1);
+	BIO_set_mem_eof_return(wb, -1);
 
-	SSL_set_bio(tls->tls_state, tls->tls_memory.ossl_breads, tls->tls_memory.ossl_bwrites);
+	SSL_set_bio(tls->tls_state, rb, wb);
 
 	return(tls);
 
@@ -655,48 +682,30 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 	}
 }
 
-static int
-update_io_sizes(Transport tls)
-{
-	char *ignored;
-	int changes = 0;
-	long size;
-
-	size = BIO_get_mem_data(tls->tls_memory.ossl_breads, &ignored);
-	if (size != tls->tls_pending_reads)
-	{
-		tls->tls_pending_reads = size;
-		changes |= 1 << 0;
-	}
-
-	size = BIO_get_mem_data(tls->tls_memory.ossl_bwrites, &ignored);
-	if (size != tls->tls_pending_writes)
-	{
-		tls->tls_pending_writes = size;
-		changes |= 1 << 1;
-	}
-
-	return(changes);
-}
-
 /*
  * Update the error status of the Transport object.
  * Flip state bits if necessary.
  */
 static void
-check_result(Transport tls, int result)
+check_result(Transport tls, const char *call, int result)
 {
 	switch(result)
 	{
-		/*
-		 * Expose the needs of the TLS state?
-		 * XXX: pending size checks may cover this.
-		 */
-		case SSL_ERROR_WANT_READ:
-		case SSL_ERROR_WANT_WRITE:
+		case SSL_ERROR_NONE:
 		break;
 
-		case SSL_ERROR_NONE:
+		case SSL_ERROR_WANT_READ:
+			/* State is irrevelant for event driven. */
+		break;
+		case SSL_ERROR_WANT_WRITE:
+			/* State is revealed by the memory BIO */
+		break;
+
+		case SSL_ERROR_WANT_CONNECT:
+		case SSL_ERROR_WANT_ACCEPT:
+			/*
+			 * Not applicable to this implementation (memory BIO's).
+			 */
 		break;
 
 		case SSL_ERROR_ZERO_RETURN:
@@ -728,18 +737,10 @@ check_result(Transport tls, int result)
 		}
 		break;
 
+		case SSL_ERROR_SYSCALL:
 		case SSL_ERROR_WANT_X509_LOOKUP:
 			/*
 			 * XXX: Currently, no callback can be set.
-			 */
-		case SSL_ERROR_WANT_CONNECT:
-		case SSL_ERROR_WANT_ACCEPT:
-		case SSL_ERROR_SYSCALL:
-			/*
-			 * Not applicable to this implementation (memory BIO's).
-			 *
-			 * This should probably cause an exception and is likely
-			 * a programming error in OpenSSL or a hardware/platform error.
 			 */
 		default:
 			printf("unknown result code: %d\n", result);
@@ -776,11 +777,11 @@ static int NAME(context_t ctx, PyObj certificates) \
 			if (PyErr_Occurred()) \
 				goto py_fail; \
 			else \
-				goto ossl_fail; \
+				goto lib_fail; \
 		} \
 		\
 		if (!INITIAL(ctx, cert)) \
-			goto ossl_fail; \
+			goto lib_fail; \
 		\
 		while ((ob = PyIter_Next(pi))) \
 		{ \
@@ -791,17 +792,17 @@ static int NAME(context_t ctx, PyObj certificates) \
 			Py_DECREF(ob); \
 			\
 			if (cert == NULL) \
-				goto ossl_fail; \
+				goto lib_fail; \
 			if (!SUBSEQUENT(ctx, cert)) \
-				goto ossl_fail; \
+				goto lib_fail; \
 		} \
 	} \
 	\
 	Py_DECREF(pi); \
 	return(1); \
 	\
-	ossl_fail: \
-		PyErr_SetString(PyExc_RuntimeError, "ossl fail"); \
+	lib_fail: \
+		PyErr_SetString(PyExc_RuntimeError, "openssl fail"); \
 	py_fail: \
 		Py_DECREF(pi); \
 		return(0); \
@@ -839,13 +840,13 @@ certificate_open(PyTypeObject *subtype, PyObj args, PyObj kw)
 		return(NULL);
 	}
 
-	cert->ossl_crt = PEM_read_X509(fp, NULL, password_parameter, &pwp);
-	if (cert->ossl_crt == NULL)
-		goto ossl_error;
+	cert->lib_crt = PEM_read_X509(fp, NULL, password_parameter, &pwp);
+	if (cert->lib_crt == NULL)
+		goto lib_error;
 
 	return((PyObj) cert);
 
-	ossl_error:
+	lib_error:
 		set_openssl_error("Error");
 	fail:
 	{
@@ -888,7 +889,7 @@ certificate_members[] = {
 */
 
 static PyObj
-key_from_ossl_key(EVP_PKEY *k)
+key_from_lib_key(EVP_PKEY *k)
 {
 	Py_RETURN_NONE;
 }
@@ -897,11 +898,11 @@ static PyObj
 str_from_asn1_string(ASN1_STRING *str)
 {
 	PyObj rob;
-	char *utf = NULL;
+	unsigned char *utf = NULL;
 	int len = 0;
 
 	len = ASN1_STRING_to_UTF8(&utf, str);
-	rob = PyUnicode_FromStringAndSize(utf, len);
+	rob = PyUnicode_FromStringAndSize((const char *) utf, len);
 
 	OPENSSL_free(utf);
 
@@ -966,7 +967,7 @@ str_from_asn1_time(ASN1_TIME *t)
 	 * The UTCTIME strings omit the century and millennium parts of the year.
 	 */
 	gt = ASN1_TIME_to_generalizedtime(t, NULL);
-	rob = PyUnicode_FromStringAndSize(M_ASN1_STRING_data(gt), M_ASN1_STRING_length(gt));
+	rob = PyUnicode_FromStringAndSize((const char *) M_ASN1_STRING_data(gt), M_ASN1_STRING_length(gt));
 	M_ASN1_GENERALIZEDTIME_free(gt);
 
 	return(rob);
@@ -978,26 +979,26 @@ str_from_asn1_time(ASN1_TIME *t)
 	CERT_PROPERTY(not_after_string, \
 		"The 'notAfter' field as a string.", X509_get_notAfter, str_from_asn1_time) \
 	CERT_PROPERTY(signature_type, \
-		"The type of used to sign the key.", X509_extract_key, key_from_ossl_key) \
+		"The type of used to sign the key.", X509_extract_key, key_from_lib_key) \
 	CERT_PROPERTY(subject, \
 		"The subject data of the cerficate.", X509_get_subject_name, seq_from_names) \
 	CERT_PROPERTY(public_key, \
-		"The public key provided by the certificate.", X509_extract_key, key_from_ossl_key) \
+		"The public key provided by the certificate.", X509_extract_key, key_from_lib_key) \
 	CERT_PROPERTY(version, \
 		"The Format Version", X509_get_version, PyLong_FromLong)
 
 #define CERT_PROPERTY(NAME, DOC, GET, CONVERT) \
-	static PyObj certificate_get_##NAME(PyObj crt) \
+	static PyObj certificate_get_##NAME(PyObj crt, void *p) \
 	{ \
-		certificate_t ossl_crt = ((Certificate) crt)->ossl_crt; \
-		return(CONVERT(GET(ossl_crt))); \
+		certificate_t lib_crt = ((Certificate) crt)->lib_crt; \
+		return(CONVERT(GET(lib_crt))); \
 	} \
 
 	CERTIFICATE_PROPERTIES()
 #undef CERT_PROPERTY
 
 static PyObj
-certificate_get_type(PyObj self)
+certificate_get_type(PyObj self, void *p)
 {
 	return (PyUnicode_FromString("x509"));
 }
@@ -1020,7 +1021,7 @@ static void
 certificate_dealloc(PyObj self)
 {
 	Certificate cert = (Certificate) self;
-	X509_free(cert->ossl_crt);
+	X509_free(cert->lib_crt);
 }
 
 static PyObj
@@ -1033,7 +1034,7 @@ certificate_repr(PyObj self)
 	long size;
 	X509_NAME *sn;
 
-	sn = X509_get_subject_name(cert->ossl_crt);
+	sn = X509_get_subject_name(cert->lib_crt);
 
 	b = BIO_new(BIO_s_mem());
 
@@ -1059,7 +1060,7 @@ certificate_str(PyObj self)
 	long size;
 
 	b = BIO_new(BIO_s_mem());
-	X509_print(b, cert->ossl_crt);
+	X509_print(b, cert->lib_crt);
 
 	size = BIO_get_mem_data(b, &ptr);
 
@@ -1095,13 +1096,13 @@ certificate_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		return(NULL); XCOVERAGE
 	}
 
-	cert->ossl_crt = load_pem_certificate(pem, password_parameter, &pwp);
-	if (cert->ossl_crt == NULL)
-		goto ossl_error;
+	cert->lib_crt = load_pem_certificate(pem, password_parameter, &pwp);
+	if (cert->lib_crt == NULL)
+		goto lib_error;
 
 	return((PyObj) cert);
 
-	ossl_error:
+	lib_error:
 		set_openssl_error("Error");
 	fail:
 		Py_XDECREF(cert);
@@ -1153,11 +1154,8 @@ CertificateType = {
 	certificate_new,                /* tp_new */
 };
 
-/*
- * context_rallocate() - create a new Transport object using the security context
- */
 static PyObj
-context_rallocate(PyObj self)
+context_accept(PyObj self)
 {
 	Context ctx = (Context) self;
 	Transport tls;
@@ -1166,18 +1164,26 @@ context_rallocate(PyObj self)
 	if (tls == NULL)
 		return(NULL);
 
-	/*
-	 * Presence of key indicates server.
-	 */
-	if (ctx->tls_key_status == key_available)
-		SSL_set_accept_state(tls->tls_state);
-	else
-		SSL_set_connect_state(tls->tls_state);
+	SSL_set_accept_state(tls->tls_state);
+	check_result(tls, "SSL_do_handshake",
+		SSL_get_error(tls->tls_state, SSL_do_handshake(tls->tls_state)));
 
-	/*
-	 * Initialize with a do_handshake.
-	 */
-	check_result(tls, SSL_get_error(tls->tls_state, SSL_do_handshake(tls->tls_state)));
+	return((PyObj) tls);
+}
+
+static PyObj
+context_connect(PyObj self)
+{
+	Context ctx = (Context) self;
+	Transport tls;
+
+	tls = create_tls_state(&TransportType, ctx);
+	if (tls == NULL)
+		return(NULL);
+
+	SSL_set_connect_state(tls->tls_state);
+	check_result(tls, "SSL_do_handshake",
+		SSL_get_error(tls->tls_state, SSL_do_handshake(tls->tls_state)));
 
 	return((PyObj) tls);
 }
@@ -1198,9 +1204,16 @@ context_void_sessions(PyObj self, PyObj args)
 
 static PyMethodDef
 context_methods[] = {
-	{"rallocate", (PyCFunction) context_rallocate,
+	{"accept", (PyCFunction) context_accept,
 		METH_NOARGS, PyDoc_STR(
-			"Allocate a TLS :py:class:`Transport` instance for "
+			"Allocate a server TLS :py:class:`Transport` instance for "
+			"secure transmission of data associated with the Context."
+		)
+	},
+
+	{"connect", (PyCFunction) context_connect,
+		METH_NOARGS, PyDoc_STR(
+			"Allocate a client TLS :py:class:`Transport` instance for "
 			"secure transmission of data associated with the Context."
 		)
 	},
@@ -1260,12 +1273,12 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	PyObj requirements = NULL; /* iterable */
 
 	char *ciphers = SHADE_OPENSSL_CIPHERS;
-	char *protocol = "TLS";
+	char *protocol = "TLS-1.2";
 
 	int allow_ssl_v2 = 0;
 
 	if (!PyArg_ParseTupleAndKeywords(args, kw,
-		"|OOOssp", kwlist,
+		"|Os#OOssp", kwlist,
 		&key_ob,
 		&(pwp.words), &(pwp.length),
 		&certificates,
@@ -1286,15 +1299,26 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	ctx->tls_key_status = key_none;
 	ctx->tls_context = NULL;
 
+	#define X_TLS_METHOD(STRING, PREFIX) \
+		else if (strcmp(STRING, protocol) == 0) \
+			ctx->tls_context = SSL_CTX_new(PREFIX##_method());
+
+		if (0)
+			;
+		X_TLS_METHODS()
+	#undef X_TLS_METHOD
+
+	#if 0
 	if (requirements == NULL)
 	{
 		/* client positioning */
 
 		#define X_TLS_METHOD(STRING, PREFIX) \
 			else if (strcmp(STRING, protocol) == 0) \
-			ctx->tls_context = SSL_CTX_new(PREFIX##_client_method());
+				ctx->tls_context = SSL_CTX_new(PREFIX##_client_method());
 
 			if (0)
+				;
 			X_TLS_METHODS()
 
 		#undef X_TLS_METHOD
@@ -1308,10 +1332,12 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 				ctx->tls_context = SSL_CTX_new(PREFIX##_server_method());
 
 			if (0)
+				;
 			X_TLS_METHODS()
 
 		#undef X_TLS_METHOD
 	}
+	#endif
 
 	if (ctx->tls_context == NULL)
 	{
@@ -1319,6 +1345,14 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 
 		PyErr_SetString(PyExc_TypeError, "invalid 'protocol' argument");
 		goto fail;
+	}
+	else
+	{
+		/*
+		 * Context initialization.
+		 */
+		SSL_CTX_set_mode(ctx->tls_context, SSL_MODE_RELEASE_BUFFERS|SSL_MODE_AUTO_RETRY);
+		SSL_CTX_set_read_ahead(ctx->tls_context, 1);
 	}
 
 	#ifdef SSL_OP_NO_SSLv2
@@ -1334,7 +1368,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	#endif
 
 	if (!SSL_CTX_set_cipher_list(ctx->tls_context, ciphers))
-		goto ossl_error;
+		goto lib_error;
 
 	/*
 	 * Load certificates.
@@ -1342,13 +1376,13 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	if (certificates != NULL)
 	{
 		if (!load_certificate_chain(ctx->tls_context, certificates))
-			goto ossl_error;
+			goto lib_error;
 	}
 
 	if (requirements != NULL)
 	{
 		if (!load_client_requirements(ctx->tls_context, requirements))
-			goto ossl_error;
+			goto lib_error;
 	}
 
 	if (key_ob != NULL)
@@ -1358,7 +1392,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		key = load_pem_private_key(key_ob, password_parameter, &pwp);
 		if (key == NULL)
 		{
-			goto ossl_error;
+			goto lib_error;
 		}
 
 		if (SSL_CTX_use_PrivateKey(ctx->tls_context, key)
@@ -1366,13 +1400,13 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 			ctx->tls_key_status = key_available;
 		else
 		{
-			goto ossl_error;
+			goto lib_error;
 		}
 	}
 
 	return((PyObj) ctx);
 
-	ossl_error:
+	lib_error:
 		set_openssl_error("ContextError");
 	fail:
 	{
@@ -1463,45 +1497,70 @@ transport_status(PyObj self)
 	Transport tls = (Transport) self;
 	PyObj rob;
 
-	rob = Py_BuildValue("(siss)",
+	rob = Py_BuildValue("(ssissi)",
+		SSL_get_version(tls->tls_state),
 		termination_string(tls->tls_termination),
 		SSL_state(tls->tls_state),
 		SSL_state_string(tls->tls_state),
-		SSL_state_string_long(tls->tls_state)
+		SSL_state_string_long(tls->tls_state),
+		SSL_want(tls->tls_state)
 	);
 
 	return(rob);
 }
 
 /*
- * Place enciphered data to be decrypted and read by the local endpoint.
+ * SSL_write the buffer entries.
  */
-static PyObj
-transport_read_enciphered(PyObj self, PyObj buffer)
+static int
+transport_flush(Transport tls)
 {
-	Transport tls = (Transport) self;
+	int xfer, r;
 	Py_buffer pb;
-	int xfer;
+	PyObj cwb;
 
-	if (PyObject_GetBuffer(buffer, &pb, PyBUF_WRITABLE))
-		return(NULL); XCOVERAGE
+	cwb = output_buffer_initial(tls);
+	if (cwb == NULL)
+		return(-1);
 
-	/*
-	 * XXX: Low memory situations may cause partial transfers
-	 */
-	xfer = BIO_read(tls->tls_memory.ossl_bwrites, GetPointer(pb), GetSize(pb));
+	if (PyObject_GetBuffer(cwb, &pb, PyBUF_SIMPLE))
+	{
+		Py_DECREF(cwb);
+		return(-1);
+	}
+
+	if (GetSize(pb) != 0)
+	{
+		xfer = SSL_write(tls->tls_state, GetPointer(pb), GetSize(pb));
+		if (xfer < 1)
+		{
+			int tls_error = SSL_get_error(tls->tls_state, xfer);
+			check_result(tls, "SSL_write", tls_error);
+			r = 0; /* processed nothing */
+		}
+		else
+		{
+			r = output_buffer_pop(tls);
+			if (r >= 0)
+			{
+				r = 1; /* processed something */
+			}
+		}
+	}
+	else
+	{
+		/* Empty Buffer Entry */
+		r = output_buffer_pop(tls);
+		if (r >= 0)
+		{
+			r = 1; /* processed something */
+		}
+	}
+
+	Py_DECREF(cwb);
 	PyBuffer_Release(&pb);
 
-	if (xfer < 0 && GetSize(pb) > 0)
-	{
-		/*
-		 * Check .error =\
-		 */
-		xfer = 0;
-	}
-	update_io_sizes(tls);
-
-	return(PyLong_FromLong((long) xfer));
+	return(r); /* r < 0 on python error */
 }
 
 /*
@@ -1511,7 +1570,7 @@ static PyObj
 transport_enciphered_read_eof(PyObj self, PyObj buffer)
 {
 	Transport tls = (Transport) self;
-	BIO_set_mem_eof_return(tls->tls_memory.ossl_breads, 0);
+	BIO_set_mem_eof_return(Transport_GetReadBuffer(tls), 0);
 	Py_RETURN_NONE;
 }
 
@@ -1519,33 +1578,32 @@ static PyObj
 transport_enciphered_write_eof(PyObj self, PyObj buffer)
 {
 	Transport tls = (Transport) self;
-	BIO_set_mem_eof_return(tls->tls_memory.ossl_bwrites, 0);
+	BIO_set_mem_eof_return(Transport_GetWriteBuffer(tls), 0);
 	Py_RETURN_NONE;
 }
 
+#if 0
 /*
- * Write enciphered protocol data into the transport.
+ * Write enciphered protocol data from the remote end into the transport.
  * Either for deciphered reads or for internal protocol management.
  */
 static PyObj
 transport_write_enciphered(PyObj self, PyObj buffer)
 {
-	char peek[sizeof(int)];
 	Transport tls = (Transport) self;
 	Py_buffer pb;
 	int xfer;
 
-	if (PyObject_GetBuffer(buffer, &pb, PyBUF_WRITABLE))
+	if (PyObject_GetBuffer(buffer, &pb, PyBUF_SIMPLE))
 		return(NULL); XCOVERAGE
 
-	/*
-	 * XXX: Low memory situations may cause partial transfers
-	 */
-	xfer = BIO_write(tls->tls_memory.ossl_breads, GetPointer(pb), GetSize(pb));
+	xfer = BIO_write(Transport_GetReadBuffer(tls), GetPointer(pb), GetSize(pb));
 	PyBuffer_Release(&pb);
 
 	if (xfer < 0 && GetSize(pb) > 0)
 	{
+		assert(xfer != -2); /* unsupported BIO operation shouldn't happen */
+
 		/*
 		 * Ignore BIO_write errors in cases where the buffer size is zero.
 		 */
@@ -1553,20 +1611,19 @@ transport_write_enciphered(PyObj self, PyObj buffer)
 	}
 	else
 	{
+		char peek[sizeof(int)];
 		int dxfer = 0;
+
 		/*
 		 * Is there a deciphered byte available?
+		 * SSL_pending should be used after this to detect its effect.
 		 */
 		dxfer = SSL_peek(tls->tls_state, peek, 1);
-		if (dxfer > 0)
-			peek[0] = 0;
-		else
+		if (dxfer < 0)
 		{
-			check_result(tls, SSL_get_error(tls->tls_state, dxfer));
+			check_result(tls, "SSL_peek", SSL_get_error(tls->tls_state, dxfer));
 		}
 	}
-
-	update_io_sizes(tls);
 
 	return(PyLong_FromLong((long) xfer));
 }
@@ -1587,10 +1644,9 @@ transport_read_deciphered(PyObj self, PyObj buffer)
 	xfer = SSL_read(tls->tls_state, GetPointer(pb), GetSize(pb));
 	if (xfer < 1)
 	{
-		check_result(tls, SSL_get_error(tls->tls_state, xfer));
+		check_result(tls, "SSL_read", SSL_get_error(tls->tls_state, xfer));
 		xfer = 0;
 	}
-	update_io_sizes(tls);
 
 	PyBuffer_Release(&pb);
 
@@ -1598,29 +1654,376 @@ transport_read_deciphered(PyObj self, PyObj buffer)
 }
 
 /*
- * Write deciphered data to be sent to the remote end.
+ * Write deciphered data to be sent to the remote end as enciphered data.
+ * Calls should be followed by read_enciphered.
  */
 static PyObj
 transport_write_deciphered(PyObj self, PyObj buffer)
 {
 	Transport tls = (Transport) self;
+	int xfer;
+	Py_ssize_t queued = 0;
+
+	queued = output_buffer_has_content(tls);
+	if (queued == -1)
+		return(NULL);
+
+	if (queued)
+	{
+		PyObj r;
+
+		/* output buffer has content, the new buffer must be enqueued */
+		r = output_buffer_append(tls, buffer);
+		if (r == NULL)
+			return(NULL);
+		else
+		{
+			return(PyLong_FromLong(-1));
+		}
+	}
+	else
+	{
+		Py_buffer pb;
+
+		if (PyObject_GetBuffer(buffer, &pb, PyBUF_SIMPLE))
+			return(NULL);
+
+		if (GetSize(pb) > 0)
+		{
+			xfer = SSL_write(tls->tls_state, GetPointer(pb), GetSize(pb));
+
+			if (xfer < 1)
+			{
+				PyObj r;
+				int tls_error = SSL_get_error(tls->tls_state, xfer);
+
+				/* want read/want write are not noted errors */
+				check_result(tls, "SSL_write", tls_error);
+				xfer = 0;
+
+				/*
+				 * SSL_write failures enqueue.
+				 */
+				r = output_buffer_append(tls, buffer);
+				if (r == NULL)
+				{
+					PyBuffer_Release(&pb);
+					return(NULL);
+				}
+				else
+				{
+					Py_DECREF(r); /* likely Py_None */
+				}
+			}
+			else
+			{
+				/* successful write */
+			}
+		}
+
+		PyBuffer_Release(&pb);
+
+		return(PyLong_FromLong((long) xfer));
+	}
+}
+
+/*
+ * Place enciphered data to be decrypted and read by the local endpoint.
+ * This should eventually satisfy SSL_WANT_READ.
+ */
+static PyObj
+transport_read_enciphered(PyObj self, PyObj buffer)
+{
+	Transport tls = (Transport) self;
 	Py_buffer pb;
 	int xfer;
+	int flush_result;
 
-	if (PyObject_GetBuffer(buffer, &pb, 0))
-		return(NULL); XCOVERAGE
-
-	xfer = SSL_write(tls->tls_state, GetPointer(pb), GetSize(pb));
-	if (xfer < 1)
+	flushing:
 	{
-		check_result(tls, SSL_get_error(tls->tls_state, xfer));
-		xfer = 0;
-	}
-	update_io_sizes(tls);
+		switch(output_buffer_has_content(tls))
+		{
+			case 1:
+				flush_result = transport_flush(tls);
+				if (flush_result < 0)
+					return(NULL);
+				else if (flush_result == 0)
+				{
+					/* SSL_write returned an error */
+				}
+				else
+				{
+					/* processed buffer item, continue */
+					goto flushing;
+				}
+			break;
 
+			case 0:
+				/* Empty output_queue, Perform BIO reads. */
+			break;
+
+			default:
+				return(NULL);
+			break;
+		}
+	}
+
+	if (PyObject_GetBuffer(buffer, &pb, PyBUF_WRITABLE))
+		return(NULL);
+
+	/*
+	 * XXX: Low memory situations may cause partial transfers
+	 */
+	xfer = BIO_read(Transport_GetWriteBuffer(tls), GetPointer(pb), GetSize(pb));
 	PyBuffer_Release(&pb);
 
-	return(PyLong_FromLong((long) xfer));
+	/* BIO_read does not fail with "0" return */
+	if (xfer < 0)
+	{
+		/* -1 may be a mere zero read/try again */
+		xfer = 0;
+		assert(xfer != -2); /* BIO Feature Error */
+	}
+	else
+	{
+		int dxfer = 0;
+		char peek[sizeof(int)];
+
+		/*
+		 * Is there a deciphered byte available?
+		 * SSL_pending should be used after this to detect its effect.
+		 */
+		dxfer = SSL_peek(tls->tls_state, peek, 1);
+		if (dxfer < 0)
+		{
+			check_result(tls, "SSL_peek", SSL_get_error(tls->tls_state, dxfer));
+		}
+	}
+
+	if (PyErr_Occurred())
+		return(NULL);
+	else
+		return(PyLong_FromLong((long) xfer));
+}
+#endif
+
+#define DEFAULT_READ_SIZE (1024 * 4)
+
+/*
+ * Write enciphered protocol data from the remote end into the transport.
+ * Either for deciphered reads or for internal protocol management.
+ * It is possible that empty buffer sequences return deciphered data.
+ */
+static PyObj
+transport_decipher(PyObj self, PyObj buffer_sequence)
+{
+	Transport tls = (Transport) self;
+	Py_buffer pb;
+	int xfer;
+	PyObj rob, bufobj;
+
+	/*
+	 * No need for a queue on decipher as the BIO will function
+	 * as our buffer. SSL_write will fail during negotiation, but BIO_write won't.
+	 */
+	PyLoop_ForEach(buffer_sequence, &bufobj)
+	{
+		Py_ssize_t bsize;
+
+		if (PyObject_GetBuffer(bufobj, &pb, PyBUF_SIMPLE))
+			break;
+
+		bsize = GetSize(pb);
+
+		/* BIO_write always appends for memory BIOs */
+		xfer = BIO_write(Transport_GetReadBuffer(tls), GetPointer(pb), bsize);
+		PyBuffer_Release(&pb);
+
+		if (xfer != bsize)
+		{
+			assert(xfer != -2); /* unsupported BIO operation shouldn't happen */
+
+			/* XXX: improve BIO_write failure */
+			PyErr_SetString(PyExc_MemoryError, "truncated ciphertext");
+			break;
+		}
+	}
+	PyLoop_CatchError(buffer_sequence)
+	{
+		/* XXX: note Transport as broken? */
+		return(NULL);
+	}
+	PyLoop_End()
+
+	rob = PyList_New(0);
+	if (rob == NULL)
+		return(NULL);
+
+	xfer = 0;
+	do
+	{
+		char *bufptr;
+		PyObj buffer;
+
+		buffer = PyByteArray_FromObject(NULL);
+		if (buffer == NULL)
+		{
+			Py_DECREF(rob);
+			return(NULL);
+		}
+
+		if (PyByteArray_Resize(buffer, DEFAULT_READ_SIZE))
+		{
+			Py_DECREF(buffer);
+			Py_DECREF(rob);
+			return(NULL);
+		}
+
+		/* Only reference to this bytearray, so don't bother with buffer protocol. */
+		bufptr = PyByteArray_AS_STRING(buffer);
+
+		xfer = SSL_read(tls->tls_state, bufptr, DEFAULT_READ_SIZE);
+		if (xfer < 1)
+		{
+			int err = SSL_get_error(tls->tls_state, xfer);
+			check_result(tls, "SSL_read", err);
+
+			if (PyErr_Occurred())
+			{
+				Py_DECREF(buffer);
+				Py_DECREF(rob);
+				return(NULL);
+			}
+			else
+			{
+				/* XXX: empty read without error */
+			}
+		}
+		else
+		{
+			if (PyByteArray_Resize(buffer, xfer) || PyList_Append(rob, buffer))
+			{
+				Py_DECREF(buffer);
+				Py_DECREF(rob);
+				return(NULL);
+			}
+		}
+
+		Py_DECREF(buffer); /* New reference owned by rob or error */
+	}
+	while (xfer == DEFAULT_READ_SIZE);
+
+	return(rob);
+}
+
+/*
+ * Write plaintext data to be enciphered and return the ciphertext to be written
+ * to the remote end.
+ */
+static PyObj
+transport_encipher(PyObj self, PyObj buffer_sequence)
+{
+	Transport tls = (Transport) self;
+	int xfer;
+	int flush_result;
+	char wrote = 0;
+	Py_ssize_t queued = 0;
+	PyObj rob, r; /* used to check deque operation results */
+
+	/* Extend queue unconditionally */
+	r = output_buffer_extend(tls, buffer_sequence);
+	if (r == NULL)
+		return(NULL);
+
+	/* Move buffers out of queue and into the Transport. */
+	flushing:
+	{
+		switch(output_buffer_has_content(tls))
+		{
+			case 0:
+				/* empty output_queue, perform BIO reads */
+			break;
+
+			case 1:
+				flush_result = transport_flush(tls);
+				if (flush_result > 0)
+					goto flushing; /* continue */
+				else if (flush_result < 0)
+				{
+					/* PyErr_Occurred() */
+					return(NULL);
+				}
+				else
+				{
+					/* empty buffer */
+				}
+			break;
+
+			default:
+				/* output_buffer_has_content error */
+				return(NULL);
+			break;
+		}
+	}
+
+	#if !TEST(slow_exit)
+		/*
+		 * Make this optional during tests in order to check
+		 * the unused edge case.
+		 */
+		if (BIO_ctrl_pending(Transport_GetWriteBuffer(tls)) == 0)
+		{
+			/* avoid the overhead */
+			return(PyTuple_New(0));
+		}
+	#endif
+
+	rob = PyList_New(0);
+	if (rob == NULL)
+		return(NULL);
+
+	xfer = 0;
+	do
+	{
+		char *bufptr = 0;
+		PyObj buffer;
+
+		buffer = PyByteArray_FromObject(NULL);
+		if (buffer == NULL)
+			return(NULL);
+
+		if (PyByteArray_Resize(buffer, DEFAULT_READ_SIZE))
+		{
+			Py_DECREF(buffer);
+			Py_DECREF(rob);
+			return(NULL);
+		}
+
+		/* Only reference to this bytearray, so don't bother with buffer protocol. */
+		bufptr = PyByteArray_AS_STRING(buffer);
+
+		xfer = BIO_read(Transport_GetWriteBuffer(tls), bufptr, DEFAULT_READ_SIZE);
+		if (xfer < 0)
+		{
+			assert(xfer != -2); /* Not Implemented? Memory BIOs implement read */
+		}
+		else
+		{
+			if (PyByteArray_Resize(buffer, xfer) || PyList_Append(rob, buffer))
+			{
+				/* failed to resize and append */
+
+				Py_DECREF(buffer);
+				Py_DECREF(rob);
+				return(NULL);
+			}
+		}
+
+		Py_DECREF(buffer); /* New reference owned by rob; drop our reference. */
+	}
+	while (xfer == DEFAULT_READ_SIZE);
+
+	return(rob);
 }
 
 static PyObj
@@ -1636,6 +2039,57 @@ transport_leak_session(PyObj self)
 	Py_RETURN_NONE;
 }
 
+/* Essentially, SSL_WANT_WRITE, but considers the output queue. */
+static PyObj
+transport_pending_output(PyObj self)
+{
+	Transport tls = (Transport) self;
+	PyObj rob;
+
+	if (BIO_ctrl_pending(Transport_GetWriteBuffer(tls)))
+		rob = Py_True;
+	else
+	{
+		/* must be true if output buffer has data */
+
+		switch (output_buffer_has_content(tls))
+		{
+			case 1:
+				rob = Py_True;
+			break;
+
+			case 0:
+				rob = Py_False;
+			break;
+
+			default:
+				return(NULL); /* Python Error */
+			break;
+		}
+	}
+
+	Py_INCREF(rob);
+	return(rob);
+}
+
+/* Pending reads or data in read buffer (potential read). */
+static PyObj
+transport_pending_input(PyObj self)
+{
+	Transport tls = (Transport) self;
+	PyObj rob;
+
+	if (BIO_ctrl_pending(Transport_GetWriteBuffer(tls)))
+		rob = Py_True;
+	else if (SSL_pending(tls->tls_state))
+		rob = Py_True;
+	else
+		rob = Py_False;
+
+	Py_INCREF(rob);
+	return(rob);
+}
+
 static PyObj
 transport_pending(PyObj self)
 {
@@ -1649,22 +2103,51 @@ transport_pending(PyObj self)
 	return(rob);
 }
 
+/*
+ * Must be performed for both directions to cause SSL_shutdown().
+ */
 static PyObj
-transport_terminate(PyObj self)
+transport_terminate(PyObj self, PyObj args)
 {
 	Transport tls = (Transport) self;
+	int direction = 0;
+
+	if (!PyArg_ParseTuple(args, "i", &direction))
+		return(NULL);
+
+	switch (direction)
+	{
+		case 1:
+		case -1:
+		case 0:
+		break;
+
+		default:
+			PyErr_SetString(PyExc_ValueError, "invalid termination polarity");
+		break;
+	}
 
 	if (tls->tls_termination != 0)
 	{
+		/* signals that shutdown seq was already initiated or done */
 		Py_INCREF(Py_False);
-		return(Py_False); /* signals that shutdown seq was already initiated or done */
+		return(Py_False);
 	}
 
-	SSL_shutdown(tls->tls_state);
-	update_io_sizes(tls);
+	/*
+	 * Both sides must be terminated in order to cause shutdown.
+	 */
+	if (direction == 0 || tls->tls_terminate + direction == 0)
+	{
+		SSL_shutdown(tls->tls_state);
+	}
+	else
+	{
+		tls->tls_terminate += direction;
+		Py_RETURN_NONE;
+	}
 
 	Py_INCREF(Py_True);
-
 	return(Py_True); /* signals that shutdown has been initiated */
 }
 
@@ -1689,13 +2172,38 @@ transport_methods[] = {
 		)
 	},
 
-	{"terminate", (PyCFunction) transport_terminate,
+	{"pending_input", (PyCFunction) transport_pending_input,
 		METH_NOARGS, PyDoc_STR(
+			"Whether or not the Transport can read data."
+		)
+	},
+
+	{"pending_output", (PyCFunction) transport_pending_output,
+		METH_NOARGS, PyDoc_STR(
+			"Whether or not the Transport needs to write data."
+		)
+	},
+
+	{"terminate", (PyCFunction) transport_terminate,
+		METH_VARARGS, PyDoc_STR(
 			"Initiate the shutdown sequence for the TLS state. "
 			"Enciphered reads and writes must be performed in order to complete the sequence."
 		)
 	},
 
+	{"encipher", (PyCFunction) transport_encipher,
+		METH_O, PyDoc_STR(
+			"Encrypt the given plaintext buffers and return the ciphertext buffers."
+		)
+	},
+
+	{"decipher", (PyCFunction) transport_decipher,
+		METH_O, PyDoc_STR(
+			"Decrypt the ciphertext buffers into a sequence plaintext buffers."
+		)
+	},
+
+	#if 0
 	{"read_enciphered", (PyCFunction) transport_read_enciphered,
 		METH_O, PyDoc_STR(
 			"Get enciphered data to be written to the remote endpoint. "
@@ -1723,8 +2231,9 @@ transport_methods[] = {
 			"sent to the remote endpoint after encryption."
 		)
 	},
+	#endif
 
-	{NULL,},
+	{NULL},
 };
 
 static PyMemberDef
@@ -1736,22 +2245,12 @@ transport_members[] = {
 		)
 	},
 
-	{"pending_enciphered_writes", T_ULONG,
-		offsetof(struct Transport, tls_pending_writes), READONLY,
-		PyDoc_STR(
-			"Snapshot of the Transport's out-going buffer used for writing. "
-			"Growth indicates need for lower-level write."
-		)
+	{"output_queue", T_OBJECT,
+		offsetof(struct Transport, output_queue), READONLY,
+		PyDoc_STR("Currently enqueued writes.")
 	},
 
-	{"pending_enciphered_reads", T_ULONG,
-		offsetof(struct Transport, tls_pending_reads), READONLY,
-		PyDoc_STR(
-			"Snapshot of the Transport's incoming buffer used for reading. "
-			"Growth indicates need for higher-level read attempt.")
-	},
-
-	{NULL,},
+	{NULL},
 };
 
 static PyObj
@@ -1759,18 +2258,42 @@ transport_get_protocol(PyObj self, void *_)
 {
 	Transport tls = (Transport) self;
 	PyObj rob = NULL;
-	intptr_t p = (intptr_t) SSL_get_ssl_method(tls->tls_state);
+	SSL_METHOD *p = (intptr_t) SSL_get_ssl_method(tls->tls_state);
 
-	/*
-	 * XXX: not working... =\
-	 */
-	#define X_TLS_PROTOCOL(ORG, STD, SID, NAME, MAJOR_VERSION, MINOR_VERSION, OSSL_METHOD) \
-		if (p == ((intptr_t) OSSL_METHOD##_method) \
-			|| p ==((intptr_t) OSSL_METHOD##_client_method) \
-			|| p == ((intptr_t) OSSL_METHOD##_server_method)) \
-			rob = Py_BuildValue("(ssi)sii", #ORG, #STD, SID, #NAME, MAJOR_VERSION, MINOR_VERSION); \
+	#define X_TLS_PROTOCOL(ORG, STD, SID, NAME, MAJOR_VERSION, MINOR_VERSION, OPENSSL_METHOD) \
+		if (p == (OPENSSL_METHOD##_method()) \
+			|| p == (OPENSSL_METHOD##_client_method()) \
+			|| p == (OPENSSL_METHOD##_server_method)()) \
+			rob = Py_BuildValue("sii", #NAME, MAJOR_VERSION, MINOR_VERSION); \
 		else
 		X_TLS_PROTOCOLS()
+
+		/* final else without an if */
+		{
+			rob = Py_None;
+			Py_INCREF(rob);
+		}
+	#undef X_TLS_PROTOCOL
+
+	return(rob);
+}
+
+static PyObj
+transport_get_standard(PyObj self, void *_)
+{
+	Transport tls = (Transport) self;
+	PyObj rob = NULL;
+	SSL_METHOD *p = (intptr_t) SSL_get_ssl_method(tls->tls_state);
+
+	#define X_TLS_PROTOCOL(ORG, STD, SID, NAME, MAJOR_VERSION, MINOR_VERSION, OPENSSL_METHOD) \
+		if (p == (OPENSSL_METHOD##_method()) \
+			|| p == (OPENSSL_METHOD##_client_method()) \
+			|| p == (OPENSSL_METHOD##_server_method)()) \
+			rob = Py_BuildValue("ssi", #ORG, #STD, SID); \
+		else
+		X_TLS_PROTOCOLS()
+
+		/* final else without an if */
 		{
 			rob = Py_None;
 			Py_INCREF(rob);
@@ -1797,18 +2320,21 @@ transport_get_peer_certificate(PyObj self, void *_)
 		certificate_t c;
 
 		c = SSL_get_peer_certificate(tls->tls_state);
-		if (c != NULL)
+		if (c == NULL)
+		{
+			/* XXX: pop openssl error */
+			;
+		}
+		else
 		{
 			crt = (Certificate) CertificateType.tp_alloc(&CertificateType, 0);
-			if (crt == NULL)
-				return(NULL); XCOVERAGE
 
 			if (crt == NULL)
 				free_certificate_t(c);
 			else
-				crt->ossl_crt = c;
+				crt->lib_crt = c;
 
-			return(crt);
+			return((PyObj) crt);
 		}
 	}
 
@@ -1832,21 +2358,27 @@ transport_get_terminated(PyObj self, void *_)
 
 static PyGetSetDef transport_getset[] = {
 	{"protocol", transport_get_protocol, NULL,
-		PyDoc_STR(
-			"The protocol used by the Transport.\n"
-		)
+		PyDoc_STR("The protocol used by the Transport as a tuple: (name, major, minor).\n"),
+		NULL,
+	},
+
+	{"standard", transport_get_standard, NULL,
+		PyDoc_STR("The protocol standard used by the Transport as a tuple: (org, std, id).\n"),
+		NULL,
 	},
 
 	{"peer_certificate", transport_get_peer_certificate, NULL,
 		PyDoc_STR(
 			"Get the peer certificate. If the Transport has yet to receive it, "
-			":py:obj:`None` will be returned."
-		)
+			"&None will be returned."
+		),
+		NULL
 	},
 
 	{"terminated", transport_get_terminated, NULL,
-		PyDoc_STR("Whether the shutdown state has been *received*.")
+		PyDoc_STR("Whether the shutdown state has been *received*."), NULL
 	},
+
 	{NULL,},
 };
 
@@ -1857,7 +2389,7 @@ transport_repr(PyObj self)
 	char *tls_state;
 	PyObj rob;
 
-	tls_state = SSL_state_string(tls->tls_state);
+	tls_state = (char *) SSL_state_string(tls->tls_state);
 
 	rob = PyUnicode_FromFormat("<%s %p[%s]>", Py_TYPE(self)->tp_name, self, tls_state);
 
@@ -1868,17 +2400,11 @@ static void
 transport_dealloc(PyObj self)
 {
 	Transport tls = (Transport) self;
-	memory_t *mp = &(tls->tls_memory);
 
 	if (tls->tls_state == NULL)
 		SSL_free(tls->tls_state);
 
-	if (mp->ossl_breads != NULL)
-		BIO_free(mp->ossl_breads);
-
-	if (mp->ossl_bwrites != NULL)
-		BIO_free(mp->ossl_bwrites);
-
+	Py_XDECREF(tls->output_queue);
 	Py_XDECREF(tls->tls_protocol_error);
 	Py_XDECREF(tls->ctx_object);
 }
@@ -1966,6 +2492,22 @@ INIT(PyDoc_STR("OpenSSL\n"))
 {
 	PyObj ob;
 	PyObj mod = NULL;
+
+	/*
+	 * For SSL_write buffer. Needed during negotiations (and handshake).
+	 */
+	if (Queue == NULL)
+	{
+		PyObj qmod;
+		qmod = PyImport_ImportModule("collections");
+		if (qmod == NULL)
+			return(NULL);
+
+		Queue = PyObject_GetAttrString(qmod, "deque");
+		Py_DECREF(qmod);
+		if (Queue == NULL)
+			return(NULL);
+	}
 
 	/*
 	 * Initialize OpenSSL.
