@@ -1,6 +1,3 @@
-#if 0
-csource = """
-#endif
 /*
  * shade/openssl.py.c - openssl access
  *
@@ -55,6 +52,54 @@ csource = """
 #endif
 
 /*
+ * Call codes used to identify the library function that caused an error.
+ */
+typedef enum {
+	call_none = 0,
+	call_handshake,
+	call_read,
+	call_write,
+	call_close,   /* terminate */
+	call_connect, /* set connect */
+	call_accept,  /* set accept */
+} call_t;
+
+static const char *
+library_call_string(call_t call)
+{
+	const char *r;
+
+	switch (call)
+	{
+		case call_none:
+			r = "none";
+		break;
+
+		case call_handshake:
+			r = "SSL_do_handshake";
+		break;
+
+		case call_read:
+			r = "SSL_read";
+		break;
+
+		case call_write:
+			r = "SSL_write";
+		break;
+
+		case call_close:
+			r = "SSL_shutdown";
+		break;
+
+		default:
+			r = "<unknown call identifier>";
+		break;
+	}
+
+	return(r);
+}
+
+/*
  * Security Context [Cipher/Protocol Parameters]
  */
 typedef SSL_CTX *context_t;
@@ -76,14 +121,6 @@ typedef X509 *certificate_t;
  * Public or Private Key
  */
 typedef EVP_PKEY *pki_key_t;
-
-/*
- * TLS parameter for keeping state with memory instead of sockets.
- */
-typedef struct {
-	BIO *reads;
-	BIO *writes;
-} memory_t;
 
 typedef enum {
 	tls_protocol_error = -3,     /* effectively terminated */
@@ -150,7 +187,7 @@ struct Transport {
 };
 typedef struct Transport *Transport;
 
-static PyObj Queue; /* write buffer */
+static PyObj Queue; /* write queue type */
 static PyTypeObject KeyType, CertificateType, ContextType, TransportType;
 
 #define GetPointer(pb) (pb.buf)
@@ -257,10 +294,10 @@ X_READ_OPENSSL_OBJECT(pki_key_t, load_pem_public_key, PEM_read_bio_PUBKEY)
 
 /*
  * OpenSSL uses a per-thread error queue, but
- * there is storage space on our objects for this very case.
+ * there is storage space on Transport for explicit association.
  */
 static PyObj
-pop_openssl_error(void)
+pop_openssl_error(call_t call)
 {
 	PyObj rob;
 	int line = -1, flags = 0;
@@ -298,7 +335,8 @@ pop_openssl_error(void)
 			"reason", reason,
 			"data", ldata,
 			"path", path,
-			"line", line
+			"line", line,
+			"call", library_call_string(call)
 	);
 
 	if (flags & ERR_TXT_MALLOCED && data != NULL)
@@ -307,8 +345,11 @@ pop_openssl_error(void)
 	return(rob);
 }
 
+/*
+ * Used for objects other than Transports.
+ */
 static void
-set_openssl_error(const char *exc_name)
+set_openssl_error(const char *exc_name, call_t call)
 {
 	PyObj err, exc = import_sibling("core", exc_name);
 	if (exc == NULL)
@@ -317,7 +358,7 @@ set_openssl_error(const char *exc_name)
 	if (ERR_peek_error() == 0)
 		return;
 
-	err = pop_openssl_error();
+	err = pop_openssl_error(call);
 	PyErr_SetObject(exc, err);
 }
 
@@ -379,7 +420,7 @@ key_generate_rsa(PyTypeObject *subtype, PyObj args, PyObj kw)
 		if (ctx != NULL)
 			EVP_PKEY_CTX_free(ctx);
 
-		set_openssl_error("Error");
+		set_openssl_error("Error", 0);
 		return(NULL);
 	}
 }
@@ -537,7 +578,7 @@ key_str(PyObj self)
 
 	error:
 	{
-		set_openssl_error("Error");
+		set_openssl_error("Error", 0);
 
 		BIO_free(out);
 		return(NULL);
@@ -563,7 +604,7 @@ key_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	Py_RETURN_NONE;
 
 	lib_error:
-		set_openssl_error("Error");
+		set_openssl_error("Error", 0);
 	fail:
 		Py_XDECREF(k);
 		return(NULL);
@@ -640,7 +681,7 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 	tls->tls_state = SSL_new(ctx->tls_context);
 	if (tls->tls_state == NULL)
 	{
-		set_openssl_error("AllocationError");
+		set_openssl_error("AllocationError", 0);
 		Py_DECREF(tls);
 		return(tls);
 	}
@@ -683,69 +724,46 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 }
 
 /*
- * Update the error status of the Transport object.
- * Flip state bits if necessary.
+ * Assigned error data.
+ * Transports are used for asynchonous purposes and success
+ * with an exception is a possible state, so the error has to be
+ * assigned and then raised after the transfer has been performed.
  */
-static void
-check_result(Transport tls, const char *call, int result)
+static int
+transport_library_error(Transport subject, call_t call)
 {
-	switch(result)
+	if (ERR_peek_error())
 	{
-		case SSL_ERROR_NONE:
-		break;
-
-		case SSL_ERROR_WANT_READ:
-			/* State is irrevelant for event driven. */
-		break;
-		case SSL_ERROR_WANT_WRITE:
-			/* State is revealed by the memory BIO */
-		break;
-
-		case SSL_ERROR_WANT_CONNECT:
-		case SSL_ERROR_WANT_ACCEPT:
-			/*
-			 * Not applicable to this implementation (memory BIO's).
-			 */
-		break;
-
-		case SSL_ERROR_ZERO_RETURN:
-			/*
-			 * Terminated.
-			 */
-			switch (tls->tls_termination)
-			{
-				case tls_terminating:
-					tls->tls_termination = tls_local_termination;
-				break;
-
-				case tls_not_terminated:
-					tls->tls_termination = tls_remote_termination;
-				break;
-
-				default:
-					/*
-					 * Already configured shutdown state.
-					 */
-				break;
-			}
-		break;
-
-		case SSL_ERROR_SSL:
-		{
-			tls->tls_protocol_error = pop_openssl_error();
-			tls->tls_termination = tls_protocol_error;
-		}
-		break;
-
-		case SSL_ERROR_SYSCALL:
-		case SSL_ERROR_WANT_X509_LOOKUP:
-			/*
-			 * XXX: Currently, no callback can be set.
-			 */
-		default:
-			printf("unknown result code: %d\n", result);
-		break;
+		subject->tls_protocol_error = pop_openssl_error(call);
+		subject->tls_termination = tls_protocol_error;
+		return(-1);
 	}
+	else
+	{
+		if (SSL_get_shutdown(subject->tls_state) & SSL_RECEIVED_SHUTDOWN)
+		{
+			if (subject->tls_termination >= 0)
+				subject->tls_termination = tls_remote_termination;
+		}
+
+		/* no error */
+		return(0);
+	}
+}
+
+/*
+ * Raised exception.
+ */
+static int
+library_error(const char *errclass, call_t call)
+{
+	if (ERR_peek_error())
+	{
+		set_openssl_error(errclass, call);
+		return(-1);
+	}
+	else
+		return(0);
 }
 
 /*
@@ -847,7 +865,7 @@ certificate_open(PyTypeObject *subtype, PyObj args, PyObj kw)
 	return((PyObj) cert);
 
 	lib_error:
-		set_openssl_error("Error");
+		set_openssl_error("Error", 0);
 	fail:
 	{
 		Py_DECREF(cert);
@@ -1103,7 +1121,7 @@ certificate_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	return((PyObj) cert);
 
 	lib_error:
-		set_openssl_error("Error");
+		set_openssl_error("Error", 0);
 	fail:
 		Py_XDECREF(cert);
 		return(NULL);
@@ -1159,14 +1177,19 @@ context_accept(PyObj self)
 {
 	Context ctx = (Context) self;
 	Transport tls;
+	int r;
 
 	tls = create_tls_state(&TransportType, ctx);
 	if (tls == NULL)
 		return(NULL);
 
 	SSL_set_accept_state(tls->tls_state);
-	check_result(tls, "SSL_do_handshake",
-		SSL_get_error(tls->tls_state, SSL_do_handshake(tls->tls_state)));
+
+	if (SSL_do_handshake(tls->tls_state) != 0 && library_error("Error", call_handshake))
+	{
+		Py_DECREF(tls);
+		return(NULL);
+	}
 
 	return((PyObj) tls);
 }
@@ -1176,14 +1199,19 @@ context_connect(PyObj self)
 {
 	Context ctx = (Context) self;
 	Transport tls;
+	int r;
 
 	tls = create_tls_state(&TransportType, ctx);
 	if (tls == NULL)
 		return(NULL);
 
 	SSL_set_connect_state(tls->tls_state);
-	check_result(tls, "SSL_do_handshake",
-		SSL_get_error(tls->tls_state, SSL_do_handshake(tls->tls_state)));
+
+	if (SSL_do_handshake(tls->tls_state) != 0 && library_error("Error", call_handshake))
+	{
+		Py_DECREF(tls);
+		return(NULL);
+	}
 
 	return((PyObj) tls);
 }
@@ -1267,6 +1295,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	struct password_parameter pwp = {"", 0};
 
 	Context ctx;
+	call_t call;
 
 	PyObj key_ob = NULL;
 	PyObj certificates = NULL; /* iterable */
@@ -1306,14 +1335,17 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		if (0)
 			;
 		X_TLS_METHODS()
+		else
+		{
+			PyErr_SetString(PyExc_ValueError, "invalid 'protocol' argument");
+			goto fail;
+		}
 	#undef X_TLS_METHOD
 
 	if (ctx->tls_context == NULL)
 	{
 		/* XXX: check for openssl failure */
-
-		PyErr_SetString(PyExc_TypeError, "invalid 'protocol' argument");
-		goto fail;
+		goto lib_error;
 	}
 	else
 	{
@@ -1376,7 +1408,9 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	return((PyObj) ctx);
 
 	lib_error:
-		set_openssl_error("ContextError");
+	{
+		set_openssl_error("ContextError", 0);
+	}
 	fail:
 	{
 		Py_XDECREF(ctx);
@@ -1384,9 +1418,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	}
 }
 
-PyDoc_STRVAR(context_doc,
-	"OpenSSL transport security context.");
-
+PyDoc_STRVAR(context_doc, "OpenSSL transport security context.");
 static PyTypeObject
 ContextType = {
 	PyVarObject_HEAD_INIT(NULL, 0)
@@ -1498,27 +1530,17 @@ transport_flush(Transport tls)
 		return(-1);
 	}
 
-	if (GetSize(pb) != 0)
+	xfer = SSL_write(tls->tls_state, GetPointer(pb), GetSize(pb));
+
+	if (xfer < 1)
 	{
-		xfer = SSL_write(tls->tls_state, GetPointer(pb), GetSize(pb));
-		if (xfer < 1)
-		{
-			int tls_error = SSL_get_error(tls->tls_state, xfer);
-			check_result(tls, "SSL_write", tls_error);
-			r = 0; /* processed nothing */
-		}
+		if (transport_library_error(tls, call_write))
+			r = -2;
 		else
-		{
-			r = output_buffer_pop(tls);
-			if (r >= 0)
-			{
-				r = 1; /* processed something */
-			}
-		}
+			r = 0; /* processed nothing */
 	}
 	else
 	{
-		/* Empty Buffer Entry */
 		r = output_buffer_pop(tls);
 		if (r >= 0)
 		{
@@ -1588,7 +1610,7 @@ transport_decipher(PyObj self, PyObj buffer_sequence)
 			assert(xfer != -2); /* unsupported BIO operation shouldn't happen */
 
 			/* XXX: improve BIO_write failure */
-			PyErr_SetString(PyExc_MemoryError, "truncated ciphertext");
+			PyErr_SetString(PyExc_MemoryError, "ciphertext truncated in buffer");
 			break;
 		}
 	}
@@ -1627,25 +1649,19 @@ transport_decipher(PyObj self, PyObj buffer_sequence)
 		bufptr = PyByteArray_AS_STRING(buffer);
 
 		xfer = SSL_read(tls->tls_state, bufptr, DEFAULT_READ_SIZE);
-		if (xfer < 1)
+		if (xfer < 1 && transport_library_error(tls, call_read))
 		{
-			int err = SSL_get_error(tls->tls_state, xfer);
-			check_result(tls, "SSL_read", err);
+			/*
+			 * Assign the error to the transport,
+			 * but allow any data to be emitted.
+			 */
 
-			if (PyErr_Occurred())
-			{
-				Py_DECREF(buffer);
-				Py_DECREF(rob);
-				return(NULL);
-			}
-			else
-			{
-				/* XXX: empty read without error */
-			}
+			Py_DECREF(buffer);
+			break;
 		}
 		else
 		{
-			if (PyByteArray_Resize(buffer, xfer) || PyList_Append(rob, buffer))
+			if (PyByteArray_Resize(buffer, MAX(0, xfer)) || PyList_Append(rob, buffer))
 			{
 				Py_DECREF(buffer);
 				Py_DECREF(rob);
@@ -1692,6 +1708,11 @@ transport_encipher(PyObj self, PyObj buffer_sequence)
 				flush_result = transport_flush(tls);
 				if (flush_result > 0)
 					goto flushing; /* continue */
+				else if (flush_result == -2)
+				{
+					/* protocol error assigned to transport */
+					;
+				}
 				else if (flush_result < 0)
 				{
 					/* PyErr_Occurred() */
@@ -1753,7 +1774,7 @@ transport_encipher(PyObj self, PyObj buffer_sequence)
 		}
 		else
 		{
-			if (PyByteArray_Resize(buffer, xfer) || PyList_Append(rob, buffer))
+			if (PyByteArray_Resize(buffer, MAX(0, xfer)) || PyList_Append(rob, buffer))
 			{
 				/* failed to resize and append */
 
@@ -1856,7 +1877,7 @@ transport_terminate(PyObj self, PyObj args)
 	Transport tls = (Transport) self;
 	int direction = 0;
 
-	if (!PyArg_ParseTuple(args, "i", &direction))
+	if (!PyArg_ParseTuple(args, "|i", &direction))
 		return(NULL);
 
 	switch (direction)
@@ -1864,10 +1885,12 @@ transport_terminate(PyObj self, PyObj args)
 		case 1:
 		case -1:
 		case 0:
+			/* validity check */
 		break;
 
 		default:
-			PyErr_SetString(PyExc_ValueError, "invalid termination polarity");
+			PyErr_SetString(PyExc_ValueError, "invalid termination polarity; must be 1 or -1");
+			return(NULL);
 		break;
 	}
 
@@ -1879,11 +1902,13 @@ transport_terminate(PyObj self, PyObj args)
 	}
 
 	/*
-	 * Both sides must be terminated in order to cause shutdown.
+	 * Both sides must be terminated in order to induce shutdown.
 	 */
 	if (direction == 0 || tls->tls_terminate + direction == 0)
 	{
+		printf("LOCAL TERMINATION\n");
 		SSL_shutdown(tls->tls_state);
+		tls->tls_termination = tls_local_termination;
 	}
 	else
 	{
@@ -1972,7 +1997,7 @@ transport_get_protocol(PyObj self, void *_)
 {
 	Transport tls = (Transport) self;
 	PyObj rob = NULL;
-	SSL_METHOD *p = (intptr_t) SSL_get_ssl_method(tls->tls_state);
+	const SSL_METHOD *p = SSL_get_ssl_method(tls->tls_state);
 
 	#define X_TLS_PROTOCOL(ORG, STD, SID, NAME, MAJOR_VERSION, MINOR_VERSION, OPENSSL_METHOD) \
 		if (p == (OPENSSL_METHOD##_method()) \
@@ -1997,7 +2022,7 @@ transport_get_standard(PyObj self, void *_)
 {
 	Transport tls = (Transport) self;
 	PyObj rob = NULL;
-	SSL_METHOD *p = (intptr_t) SSL_get_ssl_method(tls->tls_state);
+	const SSL_METHOD *p = SSL_get_ssl_method(tls->tls_state);
 
 	#define X_TLS_PROTOCOL(ORG, STD, SID, NAME, MAJOR_VERSION, MINOR_VERSION, OPENSSL_METHOD) \
 		if (p == (OPENSSL_METHOD##_method()) \
@@ -2105,8 +2130,7 @@ transport_repr(PyObj self)
 
 	tls_state = (char *) SSL_state_string(tls->tls_state);
 
-	rob = PyUnicode_FromFormat("<%s %p[%s]>", Py_TYPE(self)->tp_name, self, tls_state);
-
+	rob = PyUnicode_FromFormat("<%s [%s] at %p>", Py_TYPE(self)->tp_name, tls_state, self);
 	return(rob);
 }
 
@@ -2130,7 +2154,7 @@ transport_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	Context ctx = NULL;
 
 	if (!PyArg_ParseTupleAndKeywords(args, kw, "O", kwlist, &ctx))
-		return(NULL); XCOVERAGE
+		return(NULL);
 
 	return((PyObj) create_tls_state(subtype, ctx));
 }
@@ -2233,7 +2257,7 @@ INIT(PyDoc_STR("OpenSSL\n"))
 
 	CREATE_MODULE(&mod);
 	if (mod == NULL)
-		return(NULL); XCOVERAGE
+		return(NULL);
 
 	if (PyModule_AddIntConstant(mod, "version_code", OPENSSL_VERSION_NUMBER))
 		goto error;
@@ -2307,9 +2331,8 @@ INIT(PyDoc_STR("OpenSSL\n"))
 	return(mod);
 
 	error:
+	{
 		DROP_MODULE(mod);
 		return(NULL);
+	}
 }
-#if 0
-"""
-#endif
