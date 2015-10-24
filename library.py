@@ -2,7 +2,7 @@
 Primary Access.
 """
 try:
-	from .openssl import Context as TLS, State as Transport
+	from . import openssl
 	implementation = 'OpenSSL'
 except ImportError:
 	raise ImportError("no available security implementation")
