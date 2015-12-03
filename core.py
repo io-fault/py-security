@@ -1,3 +1,7 @@
+"""
+Exception hierarchy for security layer implementations.
+"""
+
 class Exception(Exception):
 	"""
 	Generic cryptographic exception.

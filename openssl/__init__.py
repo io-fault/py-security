@@ -1,4 +1,13 @@
+"""
+OpenSSL bindings for supporting asynchronous I/O.
+
+[ Meta ]
+
+/type
+	extension
+"""
 from ...context import import_extension_module
+
 libraries = ['ssl']
 import_extension_module()
 del import_extension_module
