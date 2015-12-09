@@ -1,8 +1,5 @@
-#if 0
-csource = """
-#endif
 /*
- * shade/kernel.py.c - acecss to kernel interfaces
+ * shade/kernel.py.c - access to kernel interfaces
  */
 #include <stdlib.h>
 #include <stdio.h>
@@ -29,22 +26,20 @@ METHODS() = {
 	{"random_integer",
 		(PyCFunction) kernel_random, METH_NOARGS,
 		PyDoc_STR(
-":returns: Random 32-bit integer\n"
-"\n"
-"Access to kernel's exposed Random function."
+"Access to kernel's exposed Random function.\n"
+"Returns a random 32-bit integer.\n"
 )},
 
 	{"_random_seed_reset",
 		(PyCFunction) kernel_reset, METH_NOARGS,
 		PyDoc_STR(
-":returns: None\n"
-"\n"
 "Reset the seed state."
+"Returns &None.\n"
 )},
 	{NULL,}
 };
 
-INIT(PyDoc_STR("Access to kernel interfaces.\n"))
+INIT(PyDoc_STR("Access to cryptography related kernel interfaces.\n"))
 {
 	PyObj mod = NULL;
 
@@ -63,6 +58,3 @@ error:
 /*
  * vim: ts=3:sw=3:noet:
  */
-#if 0
-"""
-#endif
