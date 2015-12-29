@@ -136,8 +136,8 @@ def test_io(test):
 
 	test/len(server.output_queue) == 0
 	test/len(client.output_queue) == 0
-	test/client_received == [b'client message']
-	test/server_received == [b'server message']
+	test/b''.join(client_received) == b'client message'
+	test/b''.join(server_received) == b'server message'
 
 if __name__ == '__main__':
 	import sys; from ...development import libtest
