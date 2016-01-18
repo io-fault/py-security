@@ -1530,7 +1530,11 @@ transport_flush(Transport tls)
 		return(-1);
 	}
 
-	xfer = SSL_write(tls->tls_state, GetPointer(pb), GetSize(pb));
+	if (GetSize(pb))
+		xfer = SSL_write(tls->tls_state, GetPointer(pb), GetSize(pb));
+	else
+		/* zero buffer size, pop it */
+		xfer = 1;
 
 	if (xfer < 1)
 	{
@@ -1906,7 +1910,7 @@ transport_terminate(PyObj self, PyObj args)
 	 */
 	if (direction == 0 || tls->tls_terminate + direction == 0)
 	{
-		printf("LOCAL TERMINATION\n");
+		printf("\nLOCAL TERMINATION\n");
 		SSL_shutdown(tls->tls_state);
 		tls->tls_termination = tls_local_termination;
 	}
