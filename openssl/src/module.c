@@ -1910,7 +1910,6 @@ transport_terminate(PyObj self, PyObj args)
 	 */
 	if (direction == 0 || tls->tls_terminate + direction == 0)
 	{
-		printf("\nLOCAL TERMINATION\n");
 		SSL_shutdown(tls->tls_state);
 		tls->tls_termination = tls_local_termination;
 	}
@@ -1984,7 +1983,7 @@ transport_members[] = {
 	{"error", T_OBJECT,
 		offsetof(struct Transport, tls_protocol_error), READONLY,
 		PyDoc_STR(
-			"Protocol error data. :py:obj:`None` if no *protocol* error occurred."
+			"Protocol error data. &None if no *protocol* error occurred."
 		)
 	},
 
@@ -2089,7 +2088,7 @@ transport_get_terminated(PyObj self, void *_)
 {
 	Transport tls = (Transport) self;
 
-	if (SSL_RECEIVED_SHUTDOWN & SSL_get_shutdown(tls->tls_state))
+	if (SSL_get_shutdown(tls->tls_state))
 	{
 		Py_INCREF(Py_True);
 		return(Py_True);
