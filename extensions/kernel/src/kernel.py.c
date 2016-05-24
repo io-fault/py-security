@@ -5,6 +5,10 @@
 #include <stdio.h>
 #include <time.h>
 
+#include <fault/roles.h>
+#include <fault/python/environ.h>
+#include <fault/python/module.h>
+
 static char module_seed_state[64];
 
 static PyObj

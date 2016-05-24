@@ -51,6 +51,10 @@
 	#define SHADE_OPENSSL_CIPHERS "RC4:HIGH:!aNULL:!eNULL:!NULL:!MD5"
 #endif
 
+#include <fault/roles.h>
+#include <fault/python/environ.h>
+#include <fault/python/module.h>
+
 /*
  * Call codes used to identify the library function that caused an error.
  */
