@@ -11,7 +11,7 @@ parameters = {
 
 libfactor.load('system.probe')
 
-def locate_openssl_object_header(executable = 'openssl'):
+def locate_openssl_object_header(executable):
 	"""
 	OpenSSL is identified by the presence of the executable 'openssl' in PATH.
 	"""
@@ -23,23 +23,19 @@ def locate_openssl_object_header(executable = 'openssl'):
 
 data = None
 
-def report(probe, role, module):
-	global data
-	return data
-
-def deploy(probe, role, module):
+def deploy(probe, context, role, module, executable='openssl'):
 	import shell_command
 
 	global data, _extract_nids
-	headers, libdir, objh = locate_openssl_object_header()
+	headers, libdir, objh = locate_openssl_object_header(executable)
 	nid_refs = shell_command.shell_output(_extract_nids, str(objh))
 
 	data = {
-		'preprocessor.defines': [
-			("OSSL_NIDS", nid_refs + "\n"),
+		'probe.preprocessor.defines': [
+			("OSSL_NIDS", nid_refs),
 		],
 		'system.library.directories': set([
-			
+			libdir,
 		]),
 		'system.include.directories': set([
 			headers,
@@ -48,3 +44,5 @@ def deploy(probe, role, module):
 			'ssl', 'crypto', 'z',
 		)
 	}
+
+	return data
