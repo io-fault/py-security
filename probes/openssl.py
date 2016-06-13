@@ -34,15 +34,11 @@ def deploy(probe, context, role, module, executable='openssl'):
 		'probe.preprocessor.defines': [
 			("OSSL_NIDS", nid_refs),
 		],
-		'system.library.directories': set([
-			libdir,
-		]),
-		'system.include.directories': set([
-			headers,
-		]),
-		'system.library.set': (
-			'ssl', 'crypto', 'z',
-		)
+		'system': {
+			'library.directories': set([libdir,]),
+			'include.directories': set([headers,]),
+			'library.set': ('ssl', 'crypto', 'z',)
+		}
 	}
 
 	return data
