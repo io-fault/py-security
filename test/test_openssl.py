@@ -86,13 +86,14 @@ def test_certificate(test):
 	crt = openssl.Certificate(fio)
 	test/crt.type == 'x509'
 
-	print(str(crt))
-	print(repr(crt))
-	print(crt.version)
-	print(crt.not_before_string)
-	print(crt.not_after_string)
-	print(crt.public_key)
-	print(crt.subject)
+	if 0:
+		print(str(crt))
+		print(repr(crt))
+		print(crt.version)
+		print(crt.not_before_string)
+		print(crt.not_after_string)
+		print(crt.public_key)
+		print(crt.subject)
 
 def test_no_certificates(test):
 	ctx = openssl.Context()
@@ -107,9 +108,10 @@ def test_no_certificates(test):
 
 def test_Key_generate_rsa(test):
 	k = openssl.Key.generate_rsa(1024)
-	print(str(k))
-	print(repr(k))
-	print(k.type)
+	if 0:
+		print(str(k))
+		print(repr(k))
+		print(k.type)
 	del k
 	test.garbage(0)
 
