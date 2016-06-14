@@ -53,7 +53,6 @@
 
 #include <fault/roles.h>
 #include <fault/python/environ.h>
-#include <fault/python/module.h>
 
 /*
  * Call codes used to identify the library function that caused an error.
@@ -2211,28 +2210,13 @@ TransportType = {
 	transport_new,                  /* tp_new */
 };
 
-static PyObj
-nulls(PyObj mod, PyObj arg)
-{
-	Py_RETURN_NONE;
-}
-
-METHODS() = {
-	{"nulls",
-		(PyCFunction) nulls, METH_O,
-		PyDoc_STR(
-			"Returns None. XXX: Remove?"
-		)
-	},
-	{NULL,}
-};
-
 #define PYTHON_TYPES() \
 	ID(Key) \
 	ID(Certificate) \
 	ID(Context) \
 	ID(Transport)
 
+#include <fault/python/module.h>
 INIT(PyDoc_STR("OpenSSL\n"))
 {
 	PyObj ob;

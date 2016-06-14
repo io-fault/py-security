@@ -7,7 +7,6 @@
 
 #include <fault/roles.h>
 #include <fault/python/environ.h>
-#include <fault/python/module.h>
 
 static char module_seed_state[64];
 
@@ -26,23 +25,14 @@ kernel_reset(PyObj mod)
 	Py_RETURN_NONE;
 }
 
-METHODS() = {
-	{"random_integer",
-		(PyCFunction) kernel_random, METH_NOARGS,
-		PyDoc_STR(
-"Access to kernel's exposed Random function.\n"
-"Returns a random 32-bit integer.\n"
-)},
+#define MODULE_FUNCTIONS() \
+	PYMETHOD(random_integer, kernel_random, METH_NOARGS,  \
+		"Access to kernel's exposed Random function.\n" \
+		"Returns a random 32-bit integer.\n") \
+	PYMETHOD(_random_seed_reset, kernel_reset, METH_NOARGS, \
+		"Reset the seed state. Returns &None.\n")
 
-	{"_random_seed_reset",
-		(PyCFunction) kernel_reset, METH_NOARGS,
-		PyDoc_STR(
-"Reset the seed state."
-"Returns &None.\n"
-)},
-	{NULL,}
-};
-
+#include <fault/python/module.h>
 INIT(PyDoc_STR("Access to cryptography related kernel interfaces.\n"))
 {
 	PyObj mod = NULL;
@@ -55,9 +45,9 @@ INIT(PyDoc_STR("Access to cryptography related kernel interfaces.\n"))
 		return(NULL); XCOVERAGE
 
 	return(mod);
-error:
-	DROP_MODULE(mod);
-	return(NULL);
+	error:
+		DROP_MODULE(mod);
+		return(NULL);
 }
 /*
  * vim: ts=3:sw=3:noet:
