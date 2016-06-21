@@ -1,4 +1,3 @@
 """
 """
-__pkg_bottom__ = True # Use this to detect the root package module of a project.
-__type__ = 'project'
+__factor_type__ = 'project' # Use this to detect the root package module of a project.
