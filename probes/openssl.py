@@ -1,6 +1,7 @@
 from ...development import libfactor
 from ...development import libprobe
 from ...routes import library as libroutes
+__factor_type__ = 'system.probe'
 
 _extract_nids=r"""cat {} | grep 'define[\t ]*NID' | sed 's/#[\t ]*define[ 	]*NID_/OPENSSL_NID(/;s/[ 	]*[0-9]*$/) \\/'"""
 
@@ -9,7 +10,7 @@ parameters = {
 		"The openssl executable used to identify headers and library directories.",
 }
 
-libfactor.load('system.probe')
+libfactor.load(__factor_type__)
 
 def locate_openssl_object_header(executable):
 	"""
