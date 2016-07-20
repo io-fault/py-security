@@ -1,6 +1,6 @@
 identity = 'https://fault.io/project/python/fault.cryptography'
 name = 'cryptography'
-abstract = 'Interfaces to ciphers, protocols, and cryptography related concepts.'
+abstract = 'Interfaces to ciphers, protocols, and cryptography related concepts'
 icon = '🔑'
 
 fork = 'shade'
