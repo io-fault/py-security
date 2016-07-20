@@ -1,12 +1,9 @@
-identity = 'https://fault.io/project/python/cryptography'
+identity = 'https://fault.io/project/python/fault.cryptography'
 name = 'cryptography'
-fork = 'shade'
+abstract = 'Interfaces to ciphers, protocols, and cryptography related concepts.'
 icon = '🔑'
-abstract = 'Asynchronous Interfaces for PKI implementations'
 
-release = None
-version_info = (0, 1, 0)
-version = '.'.join(map(str, version_info))
+fork = 'shade'
 
 controller = 'fault.io'
 contact = 'mailto:critical@fault.io'
