@@ -1998,6 +1998,31 @@ transport_members[] = {
 	{NULL},
 };
 
+/**
+ * Get the currently selected application layer protocol.
+ */
+static PyObj
+transport_get_application(PyObj self, void *_)
+{
+	Transport tls = (Transport) self;
+	PyObj rob = NULL;
+	const unsigned char *data = NULL;
+	unsigned int l = 0;
+
+	SSL_get0_alpn_selected(tls->tls_state, &data, &l);
+	if (l > 0)
+	{
+		rob = PyBytes_FromStringAndSize(data, l);
+	}
+	else
+	{
+		rob = Py_None;
+		Py_INCREF(rob);
+	}
+
+	return(rob);
+}
+
 static PyObj
 transport_get_protocol(PyObj self, void *_)
 {
@@ -2102,6 +2127,11 @@ transport_get_terminated(PyObj self, void *_)
 }
 
 static PyGetSetDef transport_getset[] = {
+	{"application", transport_get_application, NULL,
+		PyDoc_STR("The application protocol specified by the Transport as a bytes instance.\n"),
+		NULL,
+	},
+
 	{"protocol", transport_get_protocol, NULL,
 		PyDoc_STR("The protocol used by the Transport as a tuple: (name, major, minor).\n"),
 		NULL,
