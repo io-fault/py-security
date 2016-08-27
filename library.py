@@ -7,16 +7,16 @@ the host system's certificate set.
 import functools
 import os
 
-implementation_requirement = os.environ.get('SSL_IMPLEMENTATION', 'OpenSSL')
+requirement = os.environ.get('TSL_IMPLEMENTATION', None) or None
 
 try:
 	from . import openssl as pki
-	implementation = 'OpenSSL'
+	implementation = 'http://openssl.org'
 except ImportError:
 	raise ImportError("no available security implementation")
 
-if implementation_requirement != implementation:
-	raise ImportError("&/unix/env/SSL_IMPLEMENTATION requirement could not be met")
+if requirement and requirement != implementation:
+	raise ImportError("(system:environment)&TSL_IMPLEMENTATION requirement could not be met")
 
 @functools.lru_cache(2)
 def context(*modules):
