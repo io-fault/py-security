@@ -1678,7 +1678,7 @@ transport_decipher(PyObj self, PyObj buffer_sequence)
 			Py_DECREF(buffer);
 			break;
 		}
-		else
+		else if (xfer > 0)
 		{
 			if (PyByteArray_Resize(buffer, MAX(0, xfer)) || PyList_Append(rob, buffer))
 			{
