@@ -1,18 +1,15 @@
-/*
- * shade/openssl.py.c - openssl access
- *
- * SSL_CTX_set_client_cert_cb()
- * SSL_ERROR_WANT_X509_LOOKUP (SSL_get_error return)
- * * The OpenSSL folks note a significant limitation of this feature as
- * * that the callback functions cannot return a full chain. However,
- * * if the chain is pre-configured on the Context, the full chain will be sent.
- * * The current implementation of OpenSSL means that a callback selecting
- * * the exact chain is... limited.
- */
+/**
+	SSL_CTX_set_client_cert_cb()
+	SSL_ERROR_WANT_X509_LOOKUP (SSL_get_error return)
 
-/*
- * X509_NAMES = SSL_get_client_CA_list(transport_t) - client connection get server (requirements) CA list.
- */
+	The OpenSSL folks note a significant limitation of this feature as
+	that the callback functions cannot return a full chain. However,
+	if the chain is pre-configured on the Context, the full chain will be sent.
+	The current implementation of OpenSSL means that a callback selecting
+	the exact chain is... limited.
+
+	X509_NAMES = SSL_get_client_CA_list(transport_t) - client connection get server (requirements) CA list.
+*/
 #include <stdio.h>
 #include <unistd.h>
 
@@ -54,9 +51,9 @@
 #include <fault/roles.h>
 #include <fault/python/environ.h>
 
-/*
- * Call codes used to identify the library function that caused an error.
- */
+/**
+	Call codes used to identify the library function that caused an error.
+*/
 typedef enum {
 	call_none = 0,
 	call_handshake,
@@ -102,27 +99,27 @@ library_call_string(call_t call)
 	return(r);
 }
 
-/*
- * Security Context [Cipher/Protocol Parameters]
- */
+/**
+	Security Context [Cipher/Protocol Parameters]
+*/
 typedef SSL_CTX *context_t;
 #define free_context_t SSL_CTX_free
 
-/*
- * An instance of TLS. [Connection] State
- */
+/**
+	An instance of TLS for facilitating a secure connection.
+*/
 typedef SSL *transport_t;
 #define free_transport_t SSL_free
 
-/*
- * A Certificate.
- */
+/**
+	An X509 Certificate.
+*/
 typedef X509 *certificate_t;
 #define free_certificate_t X509_free
 
-/*
- * Public or Private Key
- */
+/**
+	Public or Private Key
+*/
 typedef EVP_PKEY *pki_key_t;
 
 typedef enum {
@@ -141,18 +138,30 @@ typedef enum {
 
 static PyObj version_info = NULL, version_str = NULL;
 
+/**
+	@reference &.openssl.Key
+	Key object structure.
+*/
 struct Key {
 	PyObject_HEAD
 	pki_key_t lib_key;
 };
 typedef struct Key *Key;
 
+/**
+	@reference &.openssl.Certificate
+	Certificate object structure.
+*/
 struct Certificate {
 	PyObject_HEAD
 	certificate_t lib_crt;
 };
 typedef struct Certificate *Certificate;
 
+/**
+	@reference &.openssl.Context
+	Security context object structure.
+*/
 struct Context {
 	PyObject_HEAD
 	context_t tls_context;
@@ -171,6 +180,9 @@ typedef struct Context *Context;
 #define Transport_GetReadBuffer(tls) (tls->tls_state->rbio)
 #define Transport_GetWriteBuffer(tls) (tls->tls_state->wbio)
 
+/**
+	@reference &.openssl.Transport
+*/
 struct Transport {
 	PyObject_HEAD
 	Context ctx_object;
@@ -1999,8 +2011,8 @@ transport_members[] = {
 };
 
 /**
- * Get the currently selected application layer protocol.
- */
+	Get the currently selected application layer protocol.
+*/
 static PyObj
 transport_get_application(PyObj self, void *_)
 {
@@ -2023,6 +2035,9 @@ transport_get_application(PyObj self, void *_)
 	return(rob);
 }
 
+/**
+	Get the *TLS* protocol being used by the transport.
+*/
 static PyObj
 transport_get_protocol(PyObj self, void *_)
 {
