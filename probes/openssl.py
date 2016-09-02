@@ -1,9 +1,16 @@
+"""
+Extract library directories and include directories for using an OpenSSL installation.
+"""
 __factor_type__ = 'system.probe'
 
 from ...development import libprobe
 from ...routes import library as libroutes
+from ...system import library as libsys
 
-_extract_nids=r"""cat {} | grep 'define[\t ]*NID' | sed 's/#[\t ]*define[ 	]*NID_/OPENSSL_NID(/;s/[ 	]*[0-9]*$/) \\/'"""
+_extract_nids= (
+	('grep', "define[\t ]*NID"),
+	('sed', r"s/#[\t ]*define[ 	]*NID_/OPENSSL_NID(/;s/[ 	]*[0-9]*$/) \\/"),
+)
 
 parameters = {
 	'executable':
@@ -22,15 +29,17 @@ def locate_openssl_object_header(executable):
 
 data = None
 
-def deploy(probe, context, role, module, executable='openssl'):
-	import shell_command
-
+def deploy(*args, executable='openssl'):
 	global data, _extract_nids
 	headers, libdir, objh = locate_openssl_object_header(executable)
-	nid_refs = shell_command.shell_output(_extract_nids, str(objh))
+
+	if 0:
+		with objh.open('rb') as f:
+			pipe = libsys.PInvocation.from_commands(*_extract_nids)
+	nid_refs = ''
 
 	data = {
-		'probe.preprocessor.defines': [
+		'source.parameters': [
 			("OSSL_NIDS", nid_refs),
 		],
 		'system': {
@@ -41,3 +50,7 @@ def deploy(probe, context, role, module, executable='openssl'):
 	}
 
 	return data
+
+if __name__ == '__main__':
+	import pprint
+	pprint.pprint(deploy())
