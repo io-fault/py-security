@@ -1,7 +1,8 @@
 """
 Extract library directories and include directories for using an OpenSSL installation.
 """
-__factor_type__ = 'system.probe'
+__factor_type__ = 'system'
+__factor_dynamics__ = 'probe'
 
 from ...development import libprobe
 from ...routes import library as libroutes

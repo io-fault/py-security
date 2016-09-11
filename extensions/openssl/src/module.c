@@ -48,7 +48,7 @@
 	#define SHADE_OPENSSL_CIPHERS "RC4:HIGH:!aNULL:!eNULL:!NULL:!MD5"
 #endif
 
-#include <fault/roles.h>
+#include <fault/libc.h>
 #include <fault/python/environ.h>
 
 /**
@@ -281,7 +281,7 @@ LOCAL_SYM(PyObj buf, pem_password_cb *cb, void *cb_data) \
 	BIO *bio; \
 	\
 	if (PyObject_GetBuffer(buf, &pb, 0)) \
-		return(NULL); XCOVERAGE \
+		return(NULL); \
 	\
 	/* Implicit Read-Only BIO: Py_buffer data is directly referenced. */ \
 	bio = BIO_new_mem_buf(GetPointer(pb), GetSize(pb)); \
@@ -608,7 +608,7 @@ key_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	Key k;
 
 	if (!PyArg_ParseTupleAndKeywords(args, kw, "O", kwlist, &pem))
-		return(NULL); XCOVERAGE
+		return(NULL);
 
 	k = (Key) subtype->tp_alloc(subtype, 0);
 	if (k == NULL)
@@ -630,7 +630,7 @@ PyDoc_STRVAR(key_doc, "OpenSSL EVP_PKEY objects.");
 static PyTypeObject
 KeyType = {
 	PyVarObject_HEAD_INIT(NULL, 0)
-	QPATH("Key"),                   /* tp_name */
+	MODULE_QPATH("Key"),            /* tp_name */
 	sizeof(struct Key),             /* tp_basicsize */
 	0,                              /* tp_itemsize */
 	key_dealloc,                    /* tp_dealloc */
@@ -682,7 +682,7 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 
 	tls = (Transport) typ->tp_alloc(typ, 0);
 	if (tls == NULL)
-		return(NULL); XCOVERAGE
+		return(NULL);
 
 	tls->output_queue = PyObject_CallFunctionObjArgs(Queue, NULL);
 	if (tls->output_queue == NULL)
@@ -1126,7 +1126,7 @@ certificate_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	cert = (Certificate) subtype->tp_alloc(subtype, 0);
 	if (cert == NULL)
 	{
-		return(NULL); XCOVERAGE
+		return(NULL);
 	}
 
 	cert->lib_crt = load_pem_certificate(pem, password_parameter, &pwp);
@@ -1147,7 +1147,7 @@ PyDoc_STRVAR(certificate_doc, "OpenSSL X509 Certificate Objects");
 static PyTypeObject
 CertificateType = {
 	PyVarObject_HEAD_INIT(NULL, 0)
-	QPATH("Certificate"),           /* tp_name */
+	MODULE_QPATH("Certificate"),    /* tp_name */
 	sizeof(struct Certificate),     /* tp_basicsize */
 	0,                              /* tp_itemsize */
 	certificate_dealloc,            /* tp_dealloc */
@@ -1437,7 +1437,7 @@ PyDoc_STRVAR(context_doc, "OpenSSL transport security context.");
 static PyTypeObject
 ContextType = {
 	PyVarObject_HEAD_INIT(NULL, 0)
-	QPATH("Context"),                /* tp_name */
+	MODULE_QPATH("Context"),         /* tp_name */
 	sizeof(struct Context),          /* tp_basicsize */
 	0,                               /* tp_itemsize */
 	context_dealloc,                 /* tp_dealloc */
@@ -1750,7 +1750,7 @@ transport_encipher(PyObj self, PyObj buffer_sequence)
 		}
 	}
 
-	#if !TEST(slow_exit)
+	#if !(FV_TEST() || FV_METRICS())
 		/*
 		 * Make this optional during tests in order to check
 		 * the unused edge case.
@@ -2215,7 +2215,7 @@ PyDoc_STRVAR(transport_doc, "OpenSSL Secure Transfer State.");
 static PyTypeObject
 TransportType = {
 	PyVarObject_HEAD_INIT(NULL, 0)
-	QPATH("Transport"),             /* tp_name */
+	MODULE_QPATH("Transport"),      /* tp_name */
 	sizeof(struct Transport),       /* tp_basicsize */
 	0,                              /* tp_itemsize */
 	transport_dealloc,              /* tp_dealloc */

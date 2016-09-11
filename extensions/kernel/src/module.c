@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <time.h>
 
-#include <fault/roles.h>
+#include <fault/libc.h>
 #include <fault/python/environ.h>
 
 static char module_seed_state[64];
@@ -42,7 +42,7 @@ INIT(PyDoc_STR("Access to cryptography related kernel interfaces.\n"))
 
 	CREATE_MODULE(&mod);
 	if (mod == NULL)
-		return(NULL); XCOVERAGE
+		return(NULL);
 
 	return(mod);
 	error:

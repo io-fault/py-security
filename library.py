@@ -13,7 +13,7 @@ try:
 	from . import openssl as pki
 	implementation = 'http://openssl.org'
 except ImportError:
-	raise ImportError("no available security implementation")
+	pass
 
 if requirement and requirement != implementation:
 	raise ImportError("(system:environment)&TSL_IMPLEMENTATION requirement could not be met")
