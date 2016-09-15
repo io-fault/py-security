@@ -247,7 +247,8 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 	X_TLS_PROTOCOL(ietf.org, RFC, 4347, DTLS, 1, 0, DTLSv1)   \
 	X_TLS_PROTOCOL(ietf.org, RFC, 6347, DTLS, 1, 2, DTLSv1_2)
 
-#define X_TLS_METHODS()               \
+#define X_TLS_METHODS()              \
+	X_TLS_METHOD("TLS", TLSv1_2)      \
 	X_TLS_METHOD("TLS-1.0", TLSv1)    \
 	X_TLS_METHOD("TLS-1.1", TLSv1_1)  \
 	X_TLS_METHOD("TLS-1.2", TLSv1_2)  \
