@@ -175,11 +175,6 @@ typedef struct Context *Context;
 #define output_buffer_initial(tls) PySequence_GetItem(tls->output_queue, 0)
 #define output_buffer_pop(tls) PySequence_DelItem(tls->output_queue, 0)
 
-/* XXX: this should probably depend on a probe */
-/* Accessors for the read BIO and write BIO */
-#define Transport_GetReadBuffer(tls) (tls->tls_state->rbio)
-#define Transport_GetWriteBuffer(tls) (tls->tls_state->wbio)
-
 /**
 	@reference &.openssl.Transport
 */
@@ -230,8 +225,16 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 	return((int) pwp->length);
 }
 
+#if OPENSSL_VERSION_NUMBER >= 0x1010000fL
+#define Transport_GetReadBuffer(tls) (SSL_get_rbio(tls->tls_state))
+#define Transport_GetWriteBuffer(tls) (SSL_get_wbio(tls->tls_state))
+
+#define X_TLS_METHODS() X_TLS_METHOD("TLS", TLS)
+#define X_TLS_PROTOCOLS() \
+	X_TLS_PROTOCOL(ietf.org, RFC, 0, TLS,  1, 0, TLS)
+#else
 /*
- * OpenSSL doesn't provide us with an X-Macro of any sort, so hand add as needed.
+ * OpenSSL V < 1.1 doesn't provide us with an X-Macro of any sort, so hand add as needed.
  * Might have to rely on some probes at some point... =\
  *
  * ORG, TYPE, ID, NAME, VERSION, OPENSSL_FRAGMENT
@@ -243,6 +246,19 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 	X_TLS_PROTOCOL(ietf.org, RFC, 6101, SSL,  3, 0, SSLv23)   \
 	X_TLS_PROTOCOL(ietf.org, RFC, 4347, DTLS, 1, 0, DTLSv1)   \
 	X_TLS_PROTOCOL(ietf.org, RFC, 6347, DTLS, 1, 2, DTLSv1_2)
+
+#define X_TLS_METHODS()               \
+	X_TLS_METHOD("TLS-1.0", TLSv1)    \
+	X_TLS_METHOD("TLS-1.1", TLSv1_1)  \
+	X_TLS_METHOD("TLS-1.2", TLSv1_2)  \
+	X_TLS_METHOD("SSL-3.0", SSLv3)    \
+	X_TLS_METHOD("compat",  SSLv23)
+
+/* XXX: this should probably depend on a probe */
+/* Accessors for the read BIO and write BIO */
+#define Transport_GetReadBuffer(tls) (tls->tls_state->rbio)
+#define Transport_GetWriteBuffer(tls) (tls->tls_state->wbio)
+#endif
 
 #define X_CERTIFICATE_TYPES() \
 	X_CERTIFICATE_TYPE(ietf.org, RFC, 5280, X509)
@@ -261,13 +277,6 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 #define X_CA_EVENTS()        \
 	X_CA_EVENT(CSR, REQUEST) \
 	X_CA_EVENT(CRL, REVOKE)
-
-#define X_TLS_METHODS()               \
-	X_TLS_METHOD("TLS-1.0", TLSv1)    \
-	X_TLS_METHOD("TLS-1.1", TLSv1_1)  \
-	X_TLS_METHOD("TLS-1.2", TLSv1_2)  \
-	X_TLS_METHOD("SSL-3.0", SSLv3)    \
-	X_TLS_METHOD("compat",  SSLv23)
 
 /*
  * Function Set to load Security Elements.
@@ -504,7 +513,7 @@ key_methods[] = {
 static const char *
 key_type_string(Key k)
 {
-	switch (EVP_PKEY_type(k->lib_key->type))
+	switch (EVP_PKEY_base_id(k->lib_key))
 	{
 		case EVP_PKEY_RSA:
 			return "rsa";
@@ -997,11 +1006,17 @@ str_from_asn1_time(ASN1_TIME *t)
 
 	/*
 	 * The other variants are strings as well...
-	 * The UTCTIME strings omit the century and millennium parts of the year.
+	 * The UTCTIME strings omit the century and
+	 * millennium parts of the year.
 	 */
-	gt = ASN1_TIME_to_generalizedtime(t, NULL);
-	rob = PyUnicode_FromStringAndSize((const char *) M_ASN1_STRING_data(gt), M_ASN1_STRING_length(gt));
-	M_ASN1_GENERALIZEDTIME_free(gt);
+
+	#if OPENSSL_VERSION_NUMBER >= 0x1010000fL
+		gt = ASN1_TIME_to_generalizedtime(t, NULL);
+	#else
+		gt = ASN1_TIME_to_generalizedtime(t, NULL);
+		rob = PyUnicode_FromStringAndSize((const char *) M_ASN1_STRING_data(gt), M_ASN1_STRING_length(gt));
+		M_ASN1_GENERALIZEDTIME_free(gt);
+	#endif
 
 	return(rob);
 }
@@ -1317,7 +1332,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	PyObj requirements = NULL; /* iterable */
 
 	char *ciphers = SHADE_OPENSSL_CIPHERS;
-	char *protocol = "TLS-1.2";
+	char *protocol = "TLS";
 
 	int allow_ssl_v2 = 0;
 
@@ -1513,10 +1528,9 @@ transport_status(PyObj self)
 	Transport tls = (Transport) self;
 	PyObj rob;
 
-	rob = Py_BuildValue("(ssissi)",
+	rob = Py_BuildValue("(ssssi)",
 		SSL_get_version(tls->tls_state),
 		termination_string(tls->tls_termination),
-		SSL_state(tls->tls_state),
 		SSL_state_string(tls->tls_state),
 		SSL_state_string_long(tls->tls_state),
 		SSL_want(tls->tls_state)
@@ -2024,7 +2038,7 @@ transport_get_application(PyObj self, void *_)
 	SSL_get0_alpn_selected(tls->tls_state, &data, &l);
 	if (l > 0)
 	{
-		rob = PyBytes_FromStringAndSize(data, l);
+		rob = PyBytes_FromStringAndSize((const char *) data, l);
 	}
 	else
 	{
