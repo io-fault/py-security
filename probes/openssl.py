@@ -5,6 +5,7 @@ __factor_type__ = 'system'
 __factor_dynamics__ = 'probe'
 
 from ...development import libprobe
+from ...development import library as libdev
 from ...routes import library as libroutes
 from ...system import library as libsys
 
@@ -39,18 +40,18 @@ def deploy(*args, executable='openssl'):
 			pipe = libsys.PInvocation.from_commands(*_extract_nids)
 	nid_refs = ''
 
-	data = {
-		'source.parameters': [
-			("OSSL_NIDS", nid_refs),
-		],
-		'system': {
-			'library.directories': set([libdir,]),
-			'include.directories': set([headers,]),
-			'library.set': ('ssl', 'crypto', 'z',)
-		}
-	}
+	return (), (
+			('OSSL_NIDS', nid_refs),
+		), [
+		libdev.iFactor.headers(headers),
+		libdev.iFactor.library(libdir, name='ssl'),
+		libdev.iFactor.library(libdir, name='crypto'),
 
-	return data
+		# This may not be the exact directory,
+		# but named system.library factors will be
+		# resolved by -lname rather than by absolute path.
+		libdev.iFactor.library(libdir, name='z'),
+	]
 
 if __name__ == '__main__':
 	import pprint
