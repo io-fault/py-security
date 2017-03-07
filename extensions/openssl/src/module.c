@@ -31,8 +31,11 @@
 
 #include <openssl/objects.h>
 
+#define Transport_GetReadBuffer(tls) (SSL_get_rbio(tls->tls_state))
+#define Transport_GetWriteBuffer(tls) (SSL_get_wbio(tls->tls_state))
+
 #ifdef OPENSSL_NO_EVP
-	#error requires openssl with EVP
+	#error fault.cryptography requires openssl with EVP
 #endif
 
 #if 0
@@ -44,8 +47,8 @@
 	#endif
 #endif
 
-#ifndef SHADE_OPENSSL_CIPHERS
-	#define SHADE_OPENSSL_CIPHERS "RC4:HIGH:!aNULL:!eNULL:!NULL:!MD5"
+#ifndef FAULT_OPENSSL_CIPHERS
+	#define FAULT_OPENSSL_CIPHERS "RC4:HIGH:!aNULL:!eNULL:!NULL:!MD5"
 #endif
 
 #include <fault/libc.h>
@@ -226,12 +229,14 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 }
 
 #if OPENSSL_VERSION_NUMBER >= 0x1010000fL
-#define Transport_GetReadBuffer(tls) (SSL_get_rbio(tls->tls_state))
-#define Transport_GetWriteBuffer(tls) (SSL_get_wbio(tls->tls_state))
 
+/**
+	TLS methods was changed in 1.1.
+*/
 #define X_TLS_METHODS() X_TLS_METHOD("TLS", TLS)
 #define X_TLS_PROTOCOLS() \
-	X_TLS_PROTOCOL(ietf.org, RFC, 0, TLS,  1, 0, TLS)
+	X_TLS_PROTOCOL(ietf.org, RFC, 0, TLS,  0, 0, TLS)
+
 #else
 /*
  * OpenSSL V < 1.1 doesn't provide us with an X-Macro of any sort, so hand add as needed.
@@ -255,10 +260,6 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 	X_TLS_METHOD("SSL-3.0", SSLv3)    \
 	X_TLS_METHOD("compat",  SSLv23)
 
-/* XXX: this should probably depend on a probe */
-/* Accessors for the read BIO and write BIO */
-#define Transport_GetReadBuffer(tls) (tls->tls_state->rbio)
-#define Transport_GetWriteBuffer(tls) (tls->tls_state->wbio)
 #endif
 
 #define X_CERTIFICATE_TYPES() \
@@ -723,7 +724,7 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 
 	if (rb == NULL || wb == NULL)
 	{
-		/* even if the error handling was separated, we'd have redundancy */
+		/* even if the error handling was separated, there would be redundancy */
 		if (rb)
 			BIO_free(rb);
 		if (wb)
@@ -1332,7 +1333,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	PyObj certificates = NULL; /* iterable */
 	PyObj requirements = NULL; /* iterable */
 
-	char *ciphers = SHADE_OPENSSL_CIPHERS;
+	char *ciphers = FAULT_OPENSSL_CIPHERS;
 	char *protocol = "TLS";
 
 	int allow_ssl_v2 = 0;
@@ -1639,9 +1640,11 @@ transport_decipher(PyObj self, PyObj buffer_sequence)
 		xfer = BIO_write(Transport_GetReadBuffer(tls), GetPointer(pb), bsize);
 		PyBuffer_Release(&pb);
 
-		if (xfer != bsize)
+		if (xfer != bsize && bsize > 0)
 		{
-			assert(xfer != -2); /* unsupported BIO operation shouldn't happen */
+			/* http://www.openssl.org/docs/manmaster/crypto/BIO_write.html */
+			/* unsupported BIO operation shouldn't happen. */
+			assert(xfer != -2);
 
 			/* XXX: improve BIO_write failure */
 			PyErr_SetString(PyExc_MemoryError, "ciphertext truncated in buffer");
@@ -2316,7 +2319,7 @@ INIT(PyDoc_STR("OpenSSL\n"))
 	if (PyModule_AddStringConstant(mod, "version", OPENSSL_VERSION_TEXT))
 		goto error;
 
-	if (PyModule_AddStringConstant(mod, "ciphers", SHADE_OPENSSL_CIPHERS))
+	if (PyModule_AddStringConstant(mod, "ciphers", FAULT_OPENSSL_CIPHERS))
 		goto error;
 
 	/*
