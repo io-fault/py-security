@@ -1,3 +1,3 @@
 """
-Executable entry points.
+# Executable entry points.
 """

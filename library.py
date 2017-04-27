@@ -1,8 +1,8 @@
 """
-Public APIs.
+# Public APIs.
 
-Provides access to the selected SSL implementation, the default public certificate set,
-the host system's certificate set.
+# Provides access to the selected SSL implementation, the default public certificate set,
+# the host system's certificate set.
 """
 import functools
 import os
@@ -21,6 +21,6 @@ if requirement and requirement != implementation:
 @functools.lru_cache(2)
 def context(*modules):
 	"""
-	Return a Context instance for the requested set.
+	# Return a Context instance for the requested set.
 	"""
 	return pki.Context(certificates=[x.bytes() for x in modules])

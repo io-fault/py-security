@@ -1,5 +1,5 @@
 """
-Extract library directories and include directories for using an OpenSSL installation.
+# Extract library directories and include directories for using an OpenSSL installation.
 """
 __factor_type__ = 'system'
 __factor_dynamics__ = 'probe'
@@ -21,7 +21,7 @@ parameters = {
 
 def locate_openssl_object_header(executable):
 	"""
-	OpenSSL is identified by the presence of the executable 'openssl' in PATH.
+	# OpenSSL is identified by the presence of the executable 'openssl' in PATH.
 	"""
 	bin = libroutes.File.which(executable)
 	prefix = bin.container.container
