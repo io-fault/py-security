@@ -248,7 +248,9 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 	X_TLS_PROTOCOL(ietf.org, RFC, 2246, TLS,  1, 0, TLSv1)    \
 	X_TLS_PROTOCOL(ietf.org, RFC, 4346, TLS,  1, 1, TLSv1_1)  \
 	X_TLS_PROTOCOL(ietf.org, RFC, 5246, TLS,  1, 2, TLSv1_2)  \
-	X_TLS_PROTOCOL(ietf.org, RFC, 6101, SSL,  3, 0, SSLv23)   \
+	X_TLS_PROTOCOL(ietf.org, RFC, 6101, SSL,  3, 0, SSLv23)
+
+#define X_DTLS_PROTOCOLS() \
 	X_TLS_PROTOCOL(ietf.org, RFC, 4347, DTLS, 1, 0, DTLSv1)   \
 	X_TLS_PROTOCOL(ietf.org, RFC, 6347, DTLS, 1, 2, DTLSv1_2)
 
@@ -2028,6 +2030,9 @@ transport_members[] = {
 	{NULL},
 };
 
+#if OPENSSL_VERSION_NUMBER < 0x1000200fL
+#define SSL_get0_alpn_selected(X, strptr, intptr) { *intptr = 0; }
+#endif
 /**
 	Get the currently selected application layer protocol.
 */
