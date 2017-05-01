@@ -4,7 +4,7 @@
 __factor_type__ = 'system'
 __factor_dynamics__ = 'probe'
 
-from ...development import libprobe
+from ...development import probe
 from ...development import library as libdev
 from ...routes import library as libroutes
 from ...system import library as libsys
