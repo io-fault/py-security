@@ -21,6 +21,7 @@
 #include <openssl/opensslv.h>
 
 #include <openssl/ssl.h>
+#include <openssl/tls1.h>
 #include <openssl/err.h>
 #include <openssl/bio.h>
 
@@ -65,6 +66,7 @@ typedef enum {
 	call_close,   /* terminate */
 	call_connect, /* set connect */
 	call_accept,  /* set accept */
+	call_set_hostname,
 } call_t;
 
 static const char *
@@ -76,6 +78,10 @@ library_call_string(call_t call)
 	{
 		case call_none:
 			r = "none";
+		break;
+
+		case call_set_hostname:
+			r = "SSL_set_tlsext_host_name";
 		break;
 
 		case call_handshake:
@@ -238,6 +244,13 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 	X_TLS_PROTOCOL(ietf.org, RFC, 0, TLS,  0, 0, TLS)
 
 #else
+
+#ifndef OPENSSL_NO_SSL3_METHOD
+	#define _X_TLS_METHOD_SSLv3 X_TLS_METHOD("SSL-3.0", SSLv3)
+#else
+	#define _X_TLS_METHOD_SSLv3
+#endif
+
 /*
  * OpenSSL V < 1.1 doesn't provide us with an X-Macro of any sort, so hand add as needed.
  * Might have to rely on some probes at some point... =\
@@ -254,12 +267,12 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 	X_TLS_PROTOCOL(ietf.org, RFC, 4347, DTLS, 1, 0, DTLSv1)   \
 	X_TLS_PROTOCOL(ietf.org, RFC, 6347, DTLS, 1, 2, DTLSv1_2)
 
-#define X_TLS_METHODS()              \
+#define X_TLS_METHODS()               \
 	X_TLS_METHOD("TLS", TLSv1_2)      \
 	X_TLS_METHOD("TLS-1.0", TLSv1)    \
 	X_TLS_METHOD("TLS-1.1", TLSv1_1)  \
 	X_TLS_METHOD("TLS-1.2", TLSv1_2)  \
-	X_TLS_METHOD("SSL-3.0", SSLv3)    \
+	_X_TLS_METHOD_SSLv3 \
 	X_TLS_METHOD("compat",  SSLv23)
 
 #endif
@@ -367,9 +380,7 @@ pop_openssl_error(call_t call)
 			"call", library_call_string(call)
 	);
 
-	if (flags & ERR_TXT_MALLOCED && data != NULL)
-		free((void *) data);
-
+	ERR_clear_error();
 	return(rob);
 }
 
@@ -1228,8 +1239,32 @@ context_accept(PyObj self)
 	return((PyObj) tls);
 }
 
+static int
+_transport_set_hostname(Transport tls, PyObj hostname)
+{
+	char *name = NULL;
+	Py_ssize_t size = 0;
+	int err;
+
+	/* no hostname */
+	if (hostname == Py_None)
+		return(0);
+
+	if (PyBytes_AsStringAndSize(hostname, &name, &size))
+		return(-1);
+
+	err = SSL_set_tlsext_host_name(tls->tls_state, (const char *) name);
+	if (err != 1)
+	{
+		library_error("Error", call_set_hostname);
+		return(-1);
+	}
+
+	return(0);
+}
+
 static PyObj
-context_connect(PyObj self)
+context_connect(PyObj self, PyObj hostname)
 {
 	Context ctx = (Context) self;
 	Transport tls;
@@ -1239,15 +1274,19 @@ context_connect(PyObj self)
 	if (tls == NULL)
 		return(NULL);
 
+	if (_transport_set_hostname(tls, hostname))
+		goto error;
+
 	SSL_set_connect_state(tls->tls_state);
 
 	if (SSL_do_handshake(tls->tls_state) != 0 && library_error("Error", call_handshake))
-	{
-		Py_DECREF(tls);
-		return(NULL);
-	}
+		goto error;
 
 	return((PyObj) tls);
+
+	error:
+		Py_DECREF((PyObj) tls);
+		return(NULL);
 }
 
 static PyObj
@@ -1274,7 +1313,7 @@ context_methods[] = {
 	},
 
 	{"connect", (PyCFunction) context_connect,
-		METH_NOARGS, PyDoc_STR(
+		METH_O, PyDoc_STR(
 			"Allocate a client TLS :py:class:`Transport` instance for "
 			"secure transmission of data associated with the Context."
 		)
@@ -1560,6 +1599,7 @@ transport_flush(Transport tls)
 	if (PyObject_GetBuffer(cwb, &pb, PyBUF_SIMPLE))
 	{
 		Py_DECREF(cwb);
+		output_buffer_pop(tls);
 		return(-1);
 	}
 
@@ -2033,9 +2073,9 @@ transport_members[] = {
 #if OPENSSL_VERSION_NUMBER < 0x1000200fL
 #define SSL_get0_alpn_selected(X, strptr, intptr) { *intptr = 0; }
 #endif
-/**
-	Get the currently selected application layer protocol.
-*/
+/* /
+	# Get the currently selected application layer protocol.
+/ */
 static PyObj
 transport_get_application(PyObj self, void *_)
 {
@@ -2048,6 +2088,28 @@ transport_get_application(PyObj self, void *_)
 	if (l > 0)
 	{
 		rob = PyBytes_FromStringAndSize((const char *) data, l);
+	}
+	else
+	{
+		rob = Py_None;
+		Py_INCREF(rob);
+	}
+
+	return(rob);
+}
+
+static PyObj
+transport_get_hostname(PyObj self, void *_)
+{
+	Transport tls = (Transport) self;
+	PyObj rob = NULL;
+	const char *name = NULL;
+	unsigned int l = 0;
+
+	name = SSL_get_servername(tls->tls_state, TLSEXT_NAMETYPE_host_name);
+	if (name != NULL)
+	{
+		rob = PyBytes_FromStringAndSize((const char *) name, strlen(name));
 	}
 	else
 	{
@@ -2150,6 +2212,34 @@ transport_get_peer_certificate(PyObj self, void *_)
 }
 
 static PyObj
+transport_get_verror(PyObj self, void *_)
+{
+	Transport tls = (Transport) self;
+	PyObj rob = NULL;
+	long vr;
+
+	vr = SSL_get_verify_result(tls->tls_state);
+	switch (vr)
+	{
+		case X509_V_OK:
+			Py_INCREF(Py_None);
+			return(Py_None);
+		break;
+
+		default:
+		{
+			char *s;
+			s = X509_verify_cert_error_string(vr);
+			rob = Py_BuildValue("(ls)", vr, s);
+		}
+		break;
+	}
+
+	Py_INCREF(Py_False);
+	return(Py_False);
+}
+
+static PyObj
 transport_get_terminated(PyObj self, void *_)
 {
 	Transport tls = (Transport) self;
@@ -2170,6 +2260,11 @@ static PyGetSetDef transport_getset[] = {
 		NULL,
 	},
 
+	{"hostname", transport_get_hostname, NULL,
+		PyDoc_STR("Get the hostname used by the Transport"),
+		NULL,
+	},
+
 	{"protocol", transport_get_protocol, NULL,
 		PyDoc_STR("The protocol used by the Transport as a tuple: (name, major, minor).\n"),
 		NULL,
@@ -2184,6 +2279,13 @@ static PyGetSetDef transport_getset[] = {
 		PyDoc_STR(
 			"Get the peer certificate. If the Transport has yet to receive it, "
 			"&None will be returned."
+		),
+		NULL
+	},
+
+	{"verror", transport_get_verror, NULL,
+		PyDoc_STR(
+			"Verification error. &None if verified, otherise, a pair."
 		),
 		NULL
 	},
@@ -2284,6 +2386,8 @@ TransportType = {
 	ID(Context) \
 	ID(Transport)
 
+#define MODULE_FUNCTIONS()
+
 #include <fault/python/module.h>
 INIT(PyDoc_STR("OpenSSL\n"))
 {
@@ -2309,9 +2413,15 @@ INIT(PyDoc_STR("OpenSSL\n"))
 	/*
 	 * Initialize OpenSSL.
 	 */
-	SSL_library_init();
+	#if OPENSSL_VERSION_NUMBER < 0x10100000L
+		SSL_library_init();
+	#else
+		OPENSSL_init_ssl(0, NULL);
+	#endif
+
 	SSL_load_error_strings();
 	ERR_load_BIO_strings();
+	ERR_load_crypto_strings();
 	OpenSSL_add_ssl_algorithms();
 
 	CREATE_MODULE(&mod);
