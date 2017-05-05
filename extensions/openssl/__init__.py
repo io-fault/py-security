@@ -4,5 +4,5 @@
 from ....development.probes import libpython
 from ...probes import openssl # provides environment parameters for openssl
 
-__factor_type__ = 'system'
-__factor_dynamics__ = 'extension'
+__factor_domain__ = 'system'
+__factor_type__ = 'extension'

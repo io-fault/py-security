@@ -1,8 +1,8 @@
 """
 # Extract library directories and include directories for using an OpenSSL installation.
 """
-__factor_type__ = 'system'
-__factor_dynamics__ = 'probe'
+__factor_domain__ = 'system'
+__factor_type__ = 'probe'
 
 from ...development import probe
 from ...development import library as libdev
