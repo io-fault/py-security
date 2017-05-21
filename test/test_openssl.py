@@ -98,7 +98,7 @@ def test_certificate(test):
 def test_no_certificates(test):
 	ctx = openssl.Context()
 	test/ctx / openssl.Context
-	tls = ctx.connect()
+	tls = ctx.connect(None)
 	test/tls / openssl.Transport
 	tls = ctx.accept()
 	test/tls / openssl.Transport
@@ -119,7 +119,7 @@ def test_io(test):
 	sctx = openssl.Context(key = key, certificates = [certificate])
 	cctx = openssl.Context(certificates = [certificate])
 
-	client = cctx.connect()
+	client = cctx.connect(None)
 	server = sctx.accept()
 
 	client_received = []
