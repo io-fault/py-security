@@ -1,15 +1,16 @@
 /**
-	SSL_CTX_set_client_cert_cb()
-	SSL_ERROR_WANT_X509_LOOKUP (SSL_get_error return)
+	# SSL_CTX_set_client_cert_cb()
+	# SSL_ERROR_WANT_X509_LOOKUP (SSL_get_error return)
 
-	The OpenSSL folks note a significant limitation of this feature as
-	that the callback functions cannot return a full chain. However,
-	if the chain is pre-configured on the Context, the full chain will be sent.
-	The current implementation of OpenSSL means that a callback selecting
-	the exact chain is... limited.
+	# The OpenSSL folks note a significant limitation of this feature as
+	# that the callback functions cannot return a full chain. However,
+	# if the chain is pre-configured on the Context, the full chain will be sent.
+	# The current implementation of OpenSSL means that a callback selecting
+	# the exact chain is... limited.
 
-	X509_NAMES = SSL_get_client_CA_list(transport_t) - client connection get server (requirements) CA list.
-*/
+	# X509_NAMES = SSL_get_client_CA_list(transport_t) - client connection get server (requirements) CA list.
+**/
+
 #include <stdio.h>
 #include <unistd.h>
 
