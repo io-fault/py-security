@@ -80,10 +80,7 @@ def test_version(test):
 	test/openssl.version_info[2] / int
 
 def test_certificate(test):
-	from entity.io.fault import ki
-
-	fio = ki.certificate('http')
-	crt = openssl.Certificate(fio)
+	crt = openssl.Certificate(certificate)
 	test/crt.type == 'x509'
 
 	if 0:
