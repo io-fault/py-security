@@ -1,4 +1,4 @@
-identity = 'http://fault.io/python/cryptography'
+identity = 'http://fault.io/src/python/cryptography'
 name = 'cryptography'
 abstract = 'Interfaces to ciphers, protocols, and cryptography related concepts'
 icon = '🔑'
