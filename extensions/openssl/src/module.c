@@ -9,8 +9,7 @@
 	# the exact chain is... limited.
 
 	# X509_NAMES = SSL_get_client_CA_list(transport_t) - client connection get server (requirements) CA list.
-**/
-
+*/
 #include <stdio.h>
 #include <unistd.h>
 
@@ -40,15 +39,6 @@
 	#error fault.cryptography requires openssl with EVP
 #endif
 
-#if 0
-	#ifndef OPENSSL_NIDS
-		/*
-		 * OPENSSL_NIDS() is defined by the probe and pre-included.
-		 */
-		#error probe module did not render OPENSSL_NIDS template macro
-	#endif
-#endif
-
 #ifndef FAULT_OPENSSL_CIPHERS
 	#define FAULT_OPENSSL_CIPHERS "RC4:HIGH:!aNULL:!eNULL:!NULL:!MD5"
 #endif
@@ -57,7 +47,7 @@
 #include <fault/python/environ.h>
 
 /**
-	Call codes used to identify the library function that caused an error.
+	# Call codes used to identify the library function that caused an error.
 */
 typedef enum {
 	call_none = 0,
@@ -110,25 +100,25 @@ library_call_string(call_t call)
 }
 
 /**
-	Security Context [Cipher/Protocol Parameters]
+	# Security Context [Cipher/Protocol Parameters]
 */
 typedef SSL_CTX *context_t;
 #define free_context_t SSL_CTX_free
 
 /**
-	An instance of TLS for facilitating a secure connection.
+	# An instance of TLS for facilitating a secure connection.
 */
 typedef SSL *transport_t;
 #define free_transport_t SSL_free
 
 /**
-	An X509 Certificate.
+	# An X509 Certificate.
 */
 typedef X509 *certificate_t;
 #define free_certificate_t X509_free
 
 /**
-	Public or Private Key
+	# Public or Private Key
 */
 typedef EVP_PKEY *pki_key_t;
 
@@ -149,8 +139,8 @@ typedef enum {
 static PyObj version_info = NULL, version_str = NULL;
 
 /**
-	@reference &.openssl.Key
-	Key object structure.
+	# @reference &.openssl.Key
+	# Key object structure.
 */
 struct Key {
 	PyObject_HEAD
@@ -159,8 +149,8 @@ struct Key {
 typedef struct Key *Key;
 
 /**
-	@reference &.openssl.Certificate
-	Certificate object structure.
+	# @reference &.openssl.Certificate
+	# Certificate object structure.
 */
 struct Certificate {
 	PyObject_HEAD
@@ -169,8 +159,8 @@ struct Certificate {
 typedef struct Certificate *Certificate;
 
 /**
-	@reference &.openssl.Context
-	Security context object structure.
+	# @reference &.openssl.Context
+	# Security context object structure.
 */
 struct Context {
 	PyObject_HEAD
@@ -186,7 +176,7 @@ typedef struct Context *Context;
 #define output_buffer_pop(tls) PySequence_DelItem(tls->output_queue, 0)
 
 /**
-	@reference &.openssl.Transport
+	# @reference &.openssl.Transport
 */
 struct Transport {
 	PyObject_HEAD
@@ -196,9 +186,9 @@ struct Transport {
 
 	PyObj tls_protocol_error; /* dictionary or NULL (None) */
 
-	/*
-	 * NULL until inspected then cached until the Transport is terminated.
-	 */
+	/**
+		# NULL until inspected then cached until the Transport is terminated.
+	*/
 	PyObj tls_peer_certificate;
 	PyObj output_queue; /* when SSL_write is not possible */
 
@@ -213,19 +203,19 @@ static PyTypeObject KeyType, CertificateType, ContextType, TransportType;
 #define GetPointer(pb) (pb.buf)
 #define GetSize(pb) (pb.len)
 
-/*
- * Prompting is rather inappropriate from a library;
- * this callback is used throughout the source to manage
- * the encryption key of a certificate or private key.
- */
+/**
+	# Prompting is rather inappropriate from a library;
+	# this callback is used throughout the source to manage
+	# the encryption key of a certificate or private key.
+*/
 struct password_parameter {
 	char *words;
 	Py_ssize_t length;
 };
 
-/*
- * Callback used to parameterize the password.
- */
+/**
+	# Callback used to parameterize the password.
+*/
 static int
 password_parameter(char *buf, int size, int rwflag, void *u)
 {
@@ -238,7 +228,7 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 #if OPENSSL_VERSION_NUMBER >= 0x1010000fL
 
 /**
-	TLS methods was changed in 1.1.
+	# TLS methods was changed in 1.1.
 */
 #define X_TLS_METHODS() X_TLS_METHOD("TLS", TLS)
 #define X_TLS_PROTOCOLS() \
@@ -253,11 +243,11 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 #endif
 
 /*
- * OpenSSL V < 1.1 doesn't provide us with an X-Macro of any sort, so hand add as needed.
- * Might have to rely on some probes at some point... =\
- *
- * ORG, TYPE, ID, NAME, VERSION, OPENSSL_FRAGMENT
- */
+	# OpenSSL V < 1.1 doesn't provide us with an X-Macro of any sort, so hand add as needed.
+	# Might have to rely on some probes at some point... =\
+
+	# ORG, TYPE, ID, NAME, VERSION, OPENSSL_FRAGMENT
+*/
 #define X_TLS_PROTOCOLS() \
 	X_TLS_PROTOCOL(ietf.org, RFC, 2246, TLS,  1, 0, TLSv1)    \
 	X_TLS_PROTOCOL(ietf.org, RFC, 4346, TLS,  1, 1, TLSv1_1)  \
@@ -281,12 +271,12 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 #define X_CERTIFICATE_TYPES() \
 	X_CERTIFICATE_TYPE(ietf.org, RFC, 5280, X509)
 
-/*
- * TODO
- * Context Cipher List Specification
- * Context Certificate Loading
- * Context Certificate Loading
- */
+/**
+	# TODO
+	# Context Cipher List Specification
+	# Context Certificate Loading
+	# Context Certificate Loading
+*/
 #define X_TLS_ALGORITHMS() \
 	X_TLS_ALGORITHMS(RSA)  \
 	X_TLS_ALGORITHMS(DSA)  \
@@ -296,9 +286,9 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 	X_CA_EVENT(CSR, REQUEST) \
 	X_CA_EVENT(CRL, REVOKE)
 
-/*
- * Function Set to load Security Elements.
- */
+/**
+	# Function Set to load Security Elements.
+*/
 #define X_READ_OPENSSL_OBJECT(TYP, LOCAL_SYM, OPENSSL_CALL) \
 static TYP \
 LOCAL_SYM(PyObj buf, pem_password_cb *cb, void *cb_data) \
@@ -326,18 +316,18 @@ LOCAL_SYM(PyObj buf, pem_password_cb *cb, void *cb_data) \
 	return(element); \
 }
 
-/*
- * need a small abstraction
- */
+/**
+	# need a small abstraction
+*/
 X_READ_OPENSSL_OBJECT(certificate_t, load_pem_certificate, PEM_read_bio_X509)
 X_READ_OPENSSL_OBJECT(pki_key_t, load_pem_private_key, PEM_read_bio_PrivateKey)
 X_READ_OPENSSL_OBJECT(pki_key_t, load_pem_public_key, PEM_read_bio_PUBKEY)
 #undef X_READ_OPENSSL_OBJECT
 
-/*
- * OpenSSL uses a per-thread error queue, but
- * there is storage space on Transport for explicit association.
- */
+/**
+	# OpenSSL uses a per-thread error queue, but
+	# there is storage space on Transport for explicit association.
+*/
 static PyObj
 pop_openssl_error(call_t call)
 {
@@ -385,9 +375,9 @@ pop_openssl_error(call_t call)
 	return(rob);
 }
 
-/*
- * Used for objects other than Transports.
- */
+/**
+	# Used for objects other than Transports.
+*/
 static void
 set_openssl_error(const char *exc_name, call_t call)
 {
@@ -695,9 +685,9 @@ KeyType = {
 	key_new,                        /* tp_new */
 };
 
-/*
- * primary transport_new parts. Normally called by the Context methods.
- */
+/**
+	# primary &transport_new parts. Normally called by the Context methods.
+*/
 static Transport
 create_tls_state(PyTypeObject *typ, Context ctx)
 {
@@ -763,12 +753,12 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 	}
 }
 
-/*
- * Assigned error data.
- * Transports are used for asynchonous purposes and success
- * with an exception is a possible state, so the error has to be
- * assigned and then raised after the transfer has been performed.
- */
+/**
+	# Assigned error data.
+	# Transports are used for asynchonous purposes and success
+	# with an exception is a possible state, so the error has to be
+	# assigned and then raised after the transfer has been performed.
+*/
 static int
 transport_library_error(Transport subject, call_t call)
 {
@@ -791,9 +781,9 @@ transport_library_error(Transport subject, call_t call)
 	}
 }
 
-/*
- * Raised exception.
- */
+/**
+	# Raised exception.
+*/
 static int
 library_error(const char *errclass, call_t call)
 {
@@ -806,10 +796,10 @@ library_error(const char *errclass, call_t call)
 		return(0);
 }
 
-/*
- * Loading certificates from an iterator is common, so
- * a utility macro. Would be a function, but some load ops are macros.
- */
+/**
+	# Loading certificates from an iterator is common, so
+	# a utility macro. Would be a function, but some load ops are macros.
+*/
 #define CERT_INIT_LOOP(NAME, INITIAL, SUBSEQUENT) \
 static int NAME(context_t ctx, PyObj certificates) \
 { \
@@ -1021,10 +1011,10 @@ str_from_asn1_time(ASN1_TIME *t)
 	ASN1_GENERALIZEDTIME *gt;
 
 	/*
-	 * The other variants are strings as well...
-	 * The UTCTIME strings omit the century and
-	 * millennium parts of the year.
-	 */
+		# The other variants are strings as well...
+		# The UTCTIME strings omit the century and
+		# millennium parts of the year.
+	*/
 
 	#if OPENSSL_VERSION_NUMBER >= 0x1010000fL
 		gt = ASN1_TIME_to_generalizedtime(t, NULL);
@@ -1397,8 +1387,8 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		return(NULL);
 
 	/*
-	 * The key is checked and loaded later.
-	 */
+		# The key is checked and loaded later.
+	*/
 	ctx->tls_key_status = key_none;
 	ctx->tls_context = NULL;
 
@@ -1424,8 +1414,8 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	else
 	{
 		/*
-		 * Context initialization.
-		 */
+			# Context initialization.
+		*/
 		SSL_CTX_set_mode(ctx->tls_context, SSL_MODE_RELEASE_BUFFERS|SSL_MODE_AUTO_RETRY);
 		SSL_CTX_set_read_ahead(ctx->tls_context, 1);
 	}
@@ -1434,8 +1424,8 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		if (!allow_ssl_v2)
 		{
 			/*
-			 * Require exlicit override to allow this.
-			 */
+				# Require exlicit override to allow this.
+			*/
 			SSL_CTX_set_options(ctx->tls_context, SSL_OP_NO_SSLv2);
 		}
 	#else
@@ -1446,8 +1436,8 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		goto lib_error;
 
 	/*
-	 * Load certificates.
-	 */
+		# Load certificates.
+	*/
 	if (certificates != NULL)
 	{
 		if (!load_certificate_chain(ctx->tls_context, certificates))
@@ -1563,9 +1553,9 @@ termination_string(termination_t i)
 	}
 }
 
-/*
- * transport_status() - extract the status of the TLS connection
- */
+/**
+	# extract the status of the TLS connection
+*/
 static PyObj
 transport_status(PyObj self)
 {
@@ -1583,9 +1573,9 @@ transport_status(PyObj self)
 	return(rob);
 }
 
-/*
- * SSL_write the buffer entries.
- */
+/**
+	# SSL_write the buffer entries.
+*/
 static int
 transport_flush(Transport tls)
 {
@@ -1632,9 +1622,9 @@ transport_flush(Transport tls)
 	return(r); /* r < 0 on python error */
 }
 
-/*
- * EOF signals.
- */
+/**
+	# EOF signals.
+*/
 static PyObj
 transport_enciphered_read_eof(PyObj self, PyObj buffer)
 {
@@ -1653,11 +1643,11 @@ transport_enciphered_write_eof(PyObj self, PyObj buffer)
 
 #define DEFAULT_READ_SIZE (1024 * 4)
 
-/*
- * Write enciphered protocol data from the remote end into the transport.
- * Either for deciphered reads or for internal protocol management.
- * It is possible that empty buffer sequences return deciphered data.
- */
+/**
+	# Write enciphered protocol data from the remote end into the transport.
+	# Either for deciphered reads or for internal protocol management.
+	# It is possible that empty buffer sequences return deciphered data.
+*/
 static PyObj
 transport_decipher(PyObj self, PyObj buffer_sequence)
 {
@@ -1666,10 +1656,10 @@ transport_decipher(PyObj self, PyObj buffer_sequence)
 	int xfer;
 	PyObj rob, bufobj;
 
-	/*
-	 * No need for a queue on decipher as the BIO will function
-	 * as our buffer. SSL_write will fail during negotiation, but BIO_write won't.
-	 */
+	/**
+		# No need for a queue on decipher as the BIO will function
+		# as our buffer. SSL_write will fail during negotiation, but BIO_write won't.
+	*/
 	PyLoop_ForEach(buffer_sequence, &bufobj)
 	{
 		Py_ssize_t bsize;
@@ -1756,10 +1746,10 @@ transport_decipher(PyObj self, PyObj buffer_sequence)
 	return(rob);
 }
 
-/*
- * Write plaintext data to be enciphered and return the ciphertext to be written
- * to the remote end.
- */
+/**
+	# Write plaintext data to be enciphered and return the ciphertext to be written
+	# to the remote end.
+*/
 static PyObj
 transport_encipher(PyObj self, PyObj buffer_sequence)
 {
@@ -1877,8 +1867,8 @@ transport_leak_session(PyObj self)
 	Transport tls = (Transport) self;
 
 	/*
-	 * Subsequent terminate() call will not notify the peer.
-	 */
+		# Subsequent terminate() call will not notify the peer.
+	*/
 
 	SSL_set_quiet_shutdown(tls->tls_state, 1);
 	Py_RETURN_NONE;
@@ -1948,9 +1938,9 @@ transport_pending(PyObj self)
 	return(rob);
 }
 
-/*
- * Must be performed for both directions to cause SSL_shutdown().
- */
+/**
+	# Must be performed for both directions to cause SSL_shutdown().
+*/
 static PyObj
 transport_terminate(PyObj self, PyObj args)
 {
@@ -2072,11 +2062,11 @@ transport_members[] = {
 };
 
 #if OPENSSL_VERSION_NUMBER < 0x1000200fL
-#define SSL_get0_alpn_selected(X, strptr, intptr) { *intptr = 0; }
+	#define SSL_get0_alpn_selected(X, strptr, intptr) { *intptr = 0; }
 #endif
-/* /
+/**
 	# Get the currently selected application layer protocol.
-/ */
+*/
 static PyObj
 transport_get_application(PyObj self, void *_)
 {
@@ -2122,7 +2112,7 @@ transport_get_hostname(PyObj self, void *_)
 }
 
 /**
-	Get the *TLS* protocol being used by the transport.
+	# Get the *TLS* protocol being used by the transport.
 */
 static PyObj
 transport_get_protocol(PyObj self, void *_)
@@ -2396,8 +2386,8 @@ INIT(PyDoc_STR("OpenSSL\n"))
 	PyObj mod = NULL;
 
 	/*
-	 * For SSL_write buffer. Needed during negotiations (and handshake).
-	 */
+		# For SSL_write buffer. Needed during negotiations (and handshake).
+	*/
 	if (Queue == NULL)
 	{
 		PyObj qmod;
@@ -2412,8 +2402,8 @@ INIT(PyDoc_STR("OpenSSL\n"))
 	}
 
 	/*
-	 * Initialize OpenSSL.
-	 */
+		# Initialize OpenSSL.
+	*/
 	#if OPENSSL_VERSION_NUMBER < 0x10100000L
 		SSL_library_init();
 	#else
@@ -2439,10 +2429,10 @@ INIT(PyDoc_STR("OpenSSL\n"))
 		goto error;
 
 	/*
-	 * Break up the version into sys.version_info style tuple.
-	 *
-	 * 0x1000105fL is 1.0.1e final
-	 */
+		# Break up the version into sys.version_info style tuple.
+
+		# 0x1000105fL is 1.0.1e final
+	*/
 	{
 		int patch_code = ((OPENSSL_VERSION_NUMBER >> 4) & 0xFF);
 		int status_code = (OPENSSL_VERSION_NUMBER & 0xF);
@@ -2488,8 +2478,8 @@ INIT(PyDoc_STR("OpenSSL\n"))
 	}
 
 	/*
-	 * Initialize types.
-	 */
+		# Initialize types.
+	*/
 	#define ID(NAME) \
 		if (PyType_Ready((PyTypeObject *) &( NAME##Type ))) \
 			goto error; \
