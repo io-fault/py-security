@@ -1,5 +1,5 @@
-identity = 'http://fault.io/src/python/cryptography'
-name = 'cryptography'
+identity = 'http://fault.io/src/python/security'
+name = 'security'
 abstract = 'Interfaces to ciphers, protocols, and cryptography related concepts'
 icon = '🔑'
 

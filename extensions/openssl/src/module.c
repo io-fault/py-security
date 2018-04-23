@@ -36,7 +36,7 @@
 #define Transport_GetWriteBuffer(tls) (SSL_get_wbio(tls->tls_state))
 
 #ifdef OPENSSL_NO_EVP
-	#error fault.cryptography requires openssl with EVP
+	#error fault.security requires openssl with EVP
 #endif
 
 #ifndef FAULT_OPENSSL_CIPHERS
