@@ -1,13 +1,21 @@
-/source/
-	`http://fault.io/src/python/security`
+! CONTEXT:
+	/protocol/
+		&<http://if.fault.io/project>
+
+/identifier/
+	`http://fault.io/python/security`
 /name/
 	`security`
+/abstract/
+	TLS and certificate interface modules
 /icon/
-	`🔑`
+	- (emoji)`🔑`
+
 /versioning/
 	continuous
 /status/
 	flux
+
 /controller/
 	fault.io
 /contact/
