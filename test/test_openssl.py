@@ -71,13 +71,12 @@ def test_version(test):
 	for att in attributes:
 		test/m_attributes << att
 
-	test/openssl.version / str
-	test/openssl.version_info / tuple
-	test/openssl.version_code / int
-
-	test/openssl.version_info[0] / int
-	test/openssl.version_info[1] / int
-	test/openssl.version_info[2] / int
+	test.isinstance(openssl.version, str)
+	test.isinstance(openssl.version_info, tuple)
+	test.isinstance(openssl.version_code, int)
+	test.isinstance(openssl.version_info[0], int)
+	test.isinstance(openssl.version_info[1], int)
+	test.isinstance(openssl.version_info[2], int)
 
 def test_certificate(test):
 	crt = openssl.Certificate(certificate)
@@ -94,11 +93,11 @@ def test_certificate(test):
 
 def test_no_certificates(test):
 	ctx = openssl.Context()
-	test/ctx / openssl.Context
+	test.isinstance(ctx, openssl.Context)
 	tls = ctx.connect(None)
-	test/tls / openssl.Transport
+	test.isinstance(tls, openssl.Transport)
 	tls = ctx.accept()
-	test/tls / openssl.Transport
+	test.isinstance(tls, openssl.Transport)
 	del tls
 	del ctx
 	test.garbage(0)

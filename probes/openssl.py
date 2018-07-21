@@ -1,7 +1,7 @@
 """
 # Extract library directories and include directories for using an OpenSSL installation.
 """
-from ...routes import library as libroutes
+from ...system import library as files
 from ...system import library as libsys
 
 _extract_nids = (
@@ -10,7 +10,7 @@ _extract_nids = (
 )
 
 def locate_openssl_object_header(executable):
-	bin = libroutes.File.which(executable)
+	bin = files.Path.which(executable)
 	prefix = bin.container.container
 	headers = prefix / 'include'
 	objh = headers / 'openssl' / 'objects.h'
