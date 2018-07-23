@@ -1801,14 +1801,12 @@ transport_encipher(PyObj self, PyObj buffer_sequence)
 		}
 	}
 
-	#if !(FV_TEST() || FV_METRICS())
-		/*
-		 * Make this optional during tests in order to check
-		 * the unused edge case.
-		 */
+	#if !(FV_INJECTIONS())
+		/**
+			# Avoid early return during tests.
+		*/
 		if (BIO_ctrl_pending(Transport_GetWriteBuffer(tls)) == 0)
 		{
-			/* avoid the overhead */
 			return(PyTuple_New(0));
 		}
 	#endif
