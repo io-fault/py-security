@@ -222,6 +222,7 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 	struct password_parameter *pwp = u;
 
 	strncpy(buf, pwp->words, (size_t) size);
+	buf[size] = '\0';
 	return((int) pwp->length);
 }
 
@@ -645,7 +646,7 @@ PyDoc_STRVAR(key_doc, "OpenSSL EVP_PKEY objects.");
 static PyTypeObject
 KeyType = {
 	PyVarObject_HEAD_INIT(NULL, 0)
-	MODULE_QPATH("Key"),            /* tp_name */
+	FACTOR_PATH("Key"),             /* tp_name */
 	sizeof(struct Key),             /* tp_basicsize */
 	0,                              /* tp_itemsize */
 	key_dealloc,                    /* tp_dealloc */
@@ -1168,7 +1169,7 @@ PyDoc_STRVAR(certificate_doc, "OpenSSL X509 Certificate Objects");
 static PyTypeObject
 CertificateType = {
 	PyVarObject_HEAD_INIT(NULL, 0)
-	MODULE_QPATH("Certificate"),    /* tp_name */
+	FACTOR_PATH("Certificate"),     /* tp_name */
 	sizeof(struct Certificate),     /* tp_basicsize */
 	0,                              /* tp_itemsize */
 	certificate_dealloc,            /* tp_dealloc */
@@ -1486,7 +1487,7 @@ PyDoc_STRVAR(context_doc, "OpenSSL transport security context.");
 static PyTypeObject
 ContextType = {
 	PyVarObject_HEAD_INIT(NULL, 0)
-	MODULE_QPATH("Context"),         /* tp_name */
+	FACTOR_PATH("Context"),          /* tp_name */
 	sizeof(struct Context),          /* tp_basicsize */
 	0,                               /* tp_itemsize */
 	context_dealloc,                 /* tp_dealloc */
@@ -1905,7 +1906,9 @@ transport_pending_output(PyObj self)
 	return(rob);
 }
 
-/* Pending reads or data in read buffer (potential read). */
+/**
+	# Pending reads or data in read buffer (potential read).
+*/
 static PyObj
 transport_pending_input(PyObj self)
 {
@@ -2162,7 +2165,9 @@ transport_get_standard(PyObj self, void *_)
 	return(rob);
 }
 
-/* SSL_get_peer_cert_chain */
+/**
+	# SSL_get_peer_cert_chain
+*/
 static PyObj
 transport_get_peer_certificate(PyObj self, void *_)
 {
@@ -2329,7 +2334,7 @@ PyDoc_STRVAR(transport_doc, "OpenSSL Secure Transfer State.");
 static PyTypeObject
 TransportType = {
 	PyVarObject_HEAD_INIT(NULL, 0)
-	MODULE_QPATH("Transport"),      /* tp_name */
+	FACTOR_PATH("Transport"),       /* tp_name */
 	sizeof(struct Transport),       /* tp_basicsize */
 	0,                              /* tp_itemsize */
 	transport_dealloc,              /* tp_dealloc */
