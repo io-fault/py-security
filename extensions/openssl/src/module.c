@@ -646,7 +646,7 @@ PyDoc_STRVAR(key_doc, "OpenSSL EVP_PKEY objects.");
 static PyTypeObject
 KeyType = {
 	PyVarObject_HEAD_INIT(NULL, 0)
-	FACTOR_PATH("Key"),             /* tp_name */
+	PYTHON_MODULE_PATH("Key"),      /* tp_name */
 	sizeof(struct Key),             /* tp_basicsize */
 	0,                              /* tp_itemsize */
 	key_dealloc,                    /* tp_dealloc */
@@ -1169,44 +1169,44 @@ PyDoc_STRVAR(certificate_doc, "OpenSSL X509 Certificate Objects");
 static PyTypeObject
 CertificateType = {
 	PyVarObject_HEAD_INIT(NULL, 0)
-	FACTOR_PATH("Certificate"),     /* tp_name */
-	sizeof(struct Certificate),     /* tp_basicsize */
-	0,                              /* tp_itemsize */
-	certificate_dealloc,            /* tp_dealloc */
-	NULL,                           /* tp_print */
-	NULL,                           /* tp_getattr */
-	NULL,                           /* tp_setattr */
-	NULL,                           /* tp_compare */
-	certificate_repr,               /* tp_repr */
-	NULL,                           /* tp_as_number */
-	NULL,                           /* tp_as_sequence */
-	NULL,                           /* tp_as_mapping */
-	NULL,                           /* tp_hash */
-	NULL,                           /* tp_call */
-	certificate_str,                /* tp_str */
-	NULL,                           /* tp_getattro */
-	NULL,                           /* tp_setattro */
-	NULL,                           /* tp_as_buffer */
+	PYTHON_MODULE_PATH("Certificate"), /* tp_name */
+	sizeof(struct Certificate),        /* tp_basicsize */
+	0,                                 /* tp_itemsize */
+	certificate_dealloc,               /* tp_dealloc */
+	NULL,                              /* tp_print */
+	NULL,                              /* tp_getattr */
+	NULL,                              /* tp_setattr */
+	NULL,                              /* tp_compare */
+	certificate_repr,                  /* tp_repr */
+	NULL,                              /* tp_as_number */
+	NULL,                              /* tp_as_sequence */
+	NULL,                              /* tp_as_mapping */
+	NULL,                              /* tp_hash */
+	NULL,                              /* tp_call */
+	certificate_str,                   /* tp_str */
+	NULL,                              /* tp_getattro */
+	NULL,                              /* tp_setattro */
+	NULL,                              /* tp_as_buffer */
 	Py_TPFLAGS_BASETYPE|
-	Py_TPFLAGS_DEFAULT,             /* tp_flags */
-	certificate_doc,                /* tp_doc */
-	NULL,                           /* tp_traverse */
-	NULL,                           /* tp_clear */
-	NULL,                           /* tp_richcompare */
-	0,                              /* tp_weaklistoffset */
-	NULL,                           /* tp_iter */
-	NULL,                           /* tp_iternext */
-	certificate_methods,            /* tp_methods */
-	certificate_members,            /* tp_members */
-	certificate_getset,             /* tp_getset */
-	NULL,                           /* tp_base */
-	NULL,                           /* tp_dict */
-	NULL,                           /* tp_descr_get */
-	NULL,                           /* tp_descr_set */
-	0,                              /* tp_dictoffset */
-	NULL,                           /* tp_init */
-	NULL,                           /* tp_alloc */
-	certificate_new,                /* tp_new */
+	Py_TPFLAGS_DEFAULT,                /* tp_flags */
+	certificate_doc,                   /* tp_doc */
+	NULL,                              /* tp_traverse */
+	NULL,                              /* tp_clear */
+	NULL,                              /* tp_richcompare */
+	0,                                 /* tp_weaklistoffset */
+	NULL,                              /* tp_iter */
+	NULL,                              /* tp_iternext */
+	certificate_methods,               /* tp_methods */
+	certificate_members,               /* tp_members */
+	certificate_getset,                /* tp_getset */
+	NULL,                              /* tp_base */
+	NULL,                              /* tp_dict */
+	NULL,                              /* tp_descr_get */
+	NULL,                              /* tp_descr_set */
+	0,                                 /* tp_dictoffset */
+	NULL,                              /* tp_init */
+	NULL,                              /* tp_alloc */
+	certificate_new,                   /* tp_new */
 };
 
 static PyObj
@@ -1487,7 +1487,7 @@ PyDoc_STRVAR(context_doc, "OpenSSL transport security context.");
 static PyTypeObject
 ContextType = {
 	PyVarObject_HEAD_INIT(NULL, 0)
-	FACTOR_PATH("Context"),          /* tp_name */
+	PYTHON_MODULE_PATH("Context"),   /* tp_name */
 	sizeof(struct Context),          /* tp_basicsize */
 	0,                               /* tp_itemsize */
 	context_dealloc,                 /* tp_dealloc */
@@ -2334,44 +2334,44 @@ PyDoc_STRVAR(transport_doc, "OpenSSL Secure Transfer State.");
 static PyTypeObject
 TransportType = {
 	PyVarObject_HEAD_INIT(NULL, 0)
-	FACTOR_PATH("Transport"),       /* tp_name */
-	sizeof(struct Transport),       /* tp_basicsize */
-	0,                              /* tp_itemsize */
-	transport_dealloc,              /* tp_dealloc */
-	NULL,                           /* tp_print */
-	NULL,                           /* tp_getattr */
-	NULL,                           /* tp_setattr */
-	NULL,                           /* tp_compare */
-	transport_repr,                 /* tp_repr */
-	NULL,                           /* tp_as_number */
-	NULL,                           /* tp_as_sequence */
-	NULL,                           /* tp_as_mapping */
-	NULL,                           /* tp_hash */
-	NULL,                           /* tp_call */
-	NULL,                           /* tp_str */
-	NULL,                           /* tp_getattro */
-	NULL,                           /* tp_setattro */
-	NULL,                           /* tp_as_buffer */
+	PYTHON_MODULE_PATH("Transport"), /* tp_name */
+	sizeof(struct Transport),        /* tp_basicsize */
+	0,                               /* tp_itemsize */
+	transport_dealloc,               /* tp_dealloc */
+	NULL,                            /* tp_print */
+	NULL,                            /* tp_getattr */
+	NULL,                            /* tp_setattr */
+	NULL,                            /* tp_compare */
+	transport_repr,                  /* tp_repr */
+	NULL,                            /* tp_as_number */
+	NULL,                            /* tp_as_sequence */
+	NULL,                            /* tp_as_mapping */
+	NULL,                            /* tp_hash */
+	NULL,                            /* tp_call */
+	NULL,                            /* tp_str */
+	NULL,                            /* tp_getattro */
+	NULL,                            /* tp_setattro */
+	NULL,                            /* tp_as_buffer */
 	Py_TPFLAGS_BASETYPE|
-	Py_TPFLAGS_DEFAULT,             /* tp_flags */
-	transport_doc,                  /* tp_doc */
-	NULL,                           /* tp_traverse */
-	NULL,                           /* tp_clear */
-	NULL,                           /* tp_richcompare */
-	0,                              /* tp_weaklistoffset */
-	NULL,                           /* tp_iter */
-	NULL,                           /* tp_iternext */
-	transport_methods,              /* tp_methods */
-	transport_members,              /* tp_members */
-	transport_getset,               /* tp_getset */
-	NULL,                           /* tp_base */
-	NULL,                           /* tp_dict */
-	NULL,                           /* tp_descr_get */
-	NULL,                           /* tp_descr_set */
-	0,                              /* tp_dictoffset */
-	NULL,                           /* tp_init */
-	NULL,                           /* tp_alloc */
-	transport_new,                  /* tp_new */
+	Py_TPFLAGS_DEFAULT,              /* tp_flags */
+	transport_doc,                   /* tp_doc */
+	NULL,                            /* tp_traverse */
+	NULL,                            /* tp_clear */
+	NULL,                            /* tp_richcompare */
+	0,                               /* tp_weaklistoffset */
+	NULL,                            /* tp_iter */
+	NULL,                            /* tp_iternext */
+	transport_methods,               /* tp_methods */
+	transport_members,               /* tp_members */
+	transport_getset,                /* tp_getset */
+	NULL,                            /* tp_base */
+	NULL,                            /* tp_dict */
+	NULL,                            /* tp_descr_get */
+	NULL,                            /* tp_descr_set */
+	0,                               /* tp_dictoffset */
+	NULL,                            /* tp_init */
+	NULL,                            /* tp_alloc */
+	transport_new,                   /* tp_new */
 };
 
 #define PYTHON_TYPES() \
