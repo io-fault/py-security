@@ -1,8 +1,8 @@
 """
 # Extract library directories and include directories for using an OpenSSL installation.
 """
-from ...system import library as files
-from ...system import library as libsys
+from ...system import files
+from ...system import execution as libexec
 
 _extract_nids = (
 	('grep', "define[\t ]*NID"),
@@ -18,4 +18,4 @@ def locate_openssl_object_header(executable):
 
 def pipe(object_header):
 	with object_header.open('rb') as f:
-		pipe = libsys.PInvocation.from_commands(*_extract_nids)
+		pipe = libexec.PInvocation.from_commands(*_extract_nids)
