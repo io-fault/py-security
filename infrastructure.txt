@@ -3,8 +3,8 @@
 		&<http://if.fault.io/project/infrastructure>
 
 /python-extension/
-	- &<http://fault.io/proxy/python/extension>
-	- &<http://fault.io/proxy/python/c-interfaces>
+	- &<http://fault.io/proxy/python#extension>
+	- &<http://fault.io/proxy/python#c-interfaces>
 
 /bsd/
 	Abstract symbol used to refer to BSD conventions and interfaces.
@@ -12,5 +12,5 @@
 	for missing BSD interfaces and libraries.
 
 /openssl/
-	- &<http://fault.io/proxy/openssl/memory-bio>
-	- &<http://fault.io/proxy/openssl/c-interfaces>
+	- &<http://fault.io/proxy/openssl#memory-bio>
+	- &<http://fault.io/proxy/openssl#c-interfaces>
