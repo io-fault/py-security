@@ -1299,14 +1299,14 @@ static PyMethodDef
 context_methods[] = {
 	{"accept", (PyCFunction) context_accept,
 		METH_NOARGS, PyDoc_STR(
-			"Allocate a server TLS :py:class:`Transport` instance for "
+			"Allocate a server TLS `Transport` instance for "
 			"secure transmission of data associated with the Context."
 		)
 	},
 
 	{"connect", (PyCFunction) context_connect,
 		METH_O, PyDoc_STR(
-			"Allocate a client TLS :py:class:`Transport` instance for "
+			"Allocate a client TLS `Transport` instance for "
 			"secure transmission of data associated with the Context."
 		)
 	},
