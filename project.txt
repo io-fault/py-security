@@ -7,7 +7,7 @@
 /name/
 	`security`
 /abstract/
-	TLS and certificate interface modules
+	Security Context usage and management.
 /icon/
 	- (emoji)`🔑`
 

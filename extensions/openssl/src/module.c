@@ -382,7 +382,7 @@ pop_openssl_error(call_t call)
 static void
 set_openssl_error(const char *exc_name, call_t call)
 {
-	PyObj err, exc = import_sibling("core", exc_name);
+	PyObj err, exc = PyImport_ImportAdjacent("core", exc_name);
 	if (exc == NULL)
 		return;
 
@@ -1034,7 +1034,7 @@ str_from_asn1_time(ASN1_TIME *t)
 	CERT_PROPERTY(not_after_string, \
 		"The 'notAfter' field as a string.", X509_get_notAfter, str_from_asn1_time) \
 	CERT_PROPERTY(signature_type, \
-		"The type of used to sign the key.", X509_extract_key, key_from_lib_key) \
+		"The type of signature used to sign the key.", X509_extract_key, key_from_lib_key) \
 	CERT_PROPERTY(subject, \
 		"The subject data of the cerficate.", X509_get_subject_name, seq_from_names) \
 	CERT_PROPERTY(public_key, \
