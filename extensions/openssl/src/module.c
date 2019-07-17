@@ -937,10 +937,6 @@ certificate_members[] = {
 	X509_CRL_get_issuer(x)
 	X509_CRL_get_REVOKED(x)
 */
-/*
-	X509_get_serialNumber
-	X509_get_signature_type
-*/
 
 static PyObj
 key_from_lib_key(EVP_PKEY *k)
@@ -1033,19 +1029,35 @@ str_from_asn1_time(ASN1_TIME *t)
 	return(rob);
 }
 
+static PyObj
+str_from_nid(int n)
+{
+	return(PyUnicode_FromString(OBJ_nid2ln(n)));
+}
+
+static PyObj
+long_from_asn1_integer(ASN1_INTEGER *i)
+{
+	return(PyLong_FromLong(ASN1_INTEGER_get(i)));
+}
+
 #define CERTIFICATE_PROPERTIES() \
 	CERT_PROPERTY(not_before_string, \
 		"The 'notBefore' field as a string.", X509_get_notBefore, str_from_asn1_time) \
 	CERT_PROPERTY(not_after_string, \
 		"The 'notAfter' field as a string.", X509_get_notAfter, str_from_asn1_time) \
 	CERT_PROPERTY(signature_type, \
-		"The type of signature used to sign the key.", X509_extract_key, key_from_lib_key) \
+		"The type of signature used to sign the key.", X509_get_signature_type, str_from_nid) \
+	CERT_PROPERTY(key, \
+		"The public key provided by the certificate.", X509_get_pubkey, key_from_lib_key) \
 	CERT_PROPERTY(subject, \
 		"The subject data of the cerficate.", X509_get_subject_name, seq_from_names) \
-	CERT_PROPERTY(public_key, \
-		"The public key provided by the certificate.", X509_extract_key, key_from_lib_key) \
+	CERT_PROPERTY(issuer, \
+		"The issuer data of the cerficate.", X509_get_issuer_name, seq_from_names) \
 	CERT_PROPERTY(version, \
-		"The Format Version", X509_get_version, PyLong_FromLong)
+		"The Format Version", X509_get_version, PyLong_FromLong) \
+	CERT_PROPERTY(serial, \
+		"The serial number field", X509_get_serialNumber, long_from_asn1_integer)
 
 #define CERT_PROPERTY(NAME, DOC, GET, CONVERT) \
 	static PyObj certificate_get_##NAME(PyObj crt, void *p) \
