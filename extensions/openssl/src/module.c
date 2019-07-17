@@ -57,6 +57,7 @@ typedef enum {
 	call_close,   /* terminate */
 	call_connect, /* set connect */
 	call_accept,  /* set accept */
+	call_shutdown,
 	call_set_hostname,
 } call_t;
 
@@ -88,6 +89,10 @@ library_call_string(call_t call)
 		break;
 
 		case call_close:
+			r = "SSL_shutdown";
+		break;
+
+		case call_shutdown:
 			r = "SSL_shutdown";
 		break;
 
@@ -1941,6 +1946,7 @@ transport_pending(PyObj self)
 
 /**
 	# Must be performed for both directions to cause SSL_shutdown().
+	# Currently, this method does not sequence termination properly.
 */
 static PyObj
 transport_terminate(PyObj self, PyObj args)
@@ -1990,6 +1996,25 @@ transport_terminate(PyObj self, PyObj args)
 	return(Py_True); /* signals that shutdown has been initiated */
 }
 
+/**
+	# Close writes.
+*/
+static PyObj
+transport_close_output(PyObj self)
+{
+	Transport tls = (Transport) self;
+
+	if (SSL_shutdown(tls->tls_state) < 0)
+	{
+		if (transport_library_error(tls, call_shutdown))
+			return(NULL);
+	}
+
+	tls->tls_termination = tls_local_termination;
+
+	Py_RETURN_NONE;
+}
+
 static PyMethodDef
 transport_methods[] = {
 	{"status", (PyCFunction) transport_status,
@@ -2028,6 +2053,10 @@ transport_methods[] = {
 			"Initiate the shutdown sequence for the TLS state. "
 			"Enciphered reads and writes must be performed in order to complete the sequence."
 		)
+	},
+
+	{"close", (PyCFunction) transport_close_output,
+		METH_NOARGS, PyDoc_STR("Initiate shutdown closing output.")
 	},
 
 	{"encipher", (PyCFunction) transport_encipher,
@@ -2222,7 +2251,7 @@ transport_get_verror(PyObj self, void *_)
 
 		default:
 		{
-			char *s;
+			const char *s;
 			s = X509_verify_cert_error_string(vr);
 			rob = Py_BuildValue("(ls)", vr, s);
 		}
