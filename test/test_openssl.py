@@ -111,7 +111,7 @@ def test_Key_generate_rsa(test):
 	del k
 	test.garbage(0)
 
-def test_io(test):
+def test_enciphered_transfers(test):
 	sctx = openssl.Context(key = key, certificates = [certificate])
 	cctx = openssl.Context(certificates = [certificate])
 
@@ -123,6 +123,7 @@ def test_io(test):
 
 	server_send_queue = [b'client message']
 	client_send_queue = [b'server message']
+	test/client.decipher([b""]) == []
 
 	for x in range(4):
 		ciphertexts = client.encipher((client_send_queue.pop(0),) if client_send_queue else ())
@@ -136,6 +137,61 @@ def test_io(test):
 	test/len(client.output_queue) == 0
 	test/b''.join(client_received) == b'client message'
 	test/b''.join(server_received) == b'server message'
+
+	server.close()
+	client.decipher(server.encipher([b""]))
+
+	client.close()
+	server.decipher(client.encipher([b""]))
+
+def test_enciphered_transfers_signals(test):
+	signals = set()
+	wants_write = (lambda: signals.add('wants-write'))
+	client_recv_termd = (lambda: signals.add('client-received-close'))
+	server_recv_termd = (lambda: signals.add('server-received-close'))
+
+	sctx = openssl.Context(key = key, certificates = [certificate])
+	cctx = openssl.Context(certificates = [certificate])
+
+	client = cctx.connect(None)
+	client.connect_transmit_ready(wants_write)
+	client.connect_receive_closed(client_recv_termd)
+
+	server = sctx.accept()
+	server.connect_receive_closed(server_recv_termd)
+
+	test/list(signals) == []
+
+	client_received = []
+	server_received = []
+
+	server_send_queue = [b'client message']
+	client_send_queue = [b'server message']
+	test/client.decipher([b""]) == []
+
+	for x in range(4):
+		ciphertexts = client.encipher((client_send_queue.pop(0),) if client_send_queue else ())
+		plaintexts = server.decipher(ciphertexts)
+		server_received.extend(plaintexts)
+		ciphertexts = server.encipher((server_send_queue.pop(0),) if server_send_queue else ())
+		plaintexts = client.decipher(ciphertexts)
+		client_received.extend(plaintexts)
+
+	test/('client-received-close' in signals) == False
+	test/('wants-write' in signals) == False
+	test/len(server.output_queue) == 0
+	test/len(client.output_queue) == 0
+	test/b''.join(client_received) == b'client message'
+	test/b''.join(server_received) == b'server message'
+
+	server.close()
+	client.decipher(server.encipher([b""]))
+	test/('client-received-close' in signals) == True
+
+	test/('server-received-close' in signals) == False
+	client.close()
+	server.decipher(client.encipher([b""]))
+	test/('server-received-close' in signals) == True
 
 if __name__ == '__main__':
 	import sys; from ...test import library as libtest

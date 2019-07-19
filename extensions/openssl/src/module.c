@@ -36,7 +36,7 @@
 #define Transport_GetWriteBuffer(tls) (SSL_get_wbio(tls->tls_state))
 
 #ifdef OPENSSL_NO_EVP
-	#error fault.security requires openssl with EVP
+	#error fault.security transport context requires openssl with EVP
 #endif
 
 #ifndef FAULT_OPENSSL_CIPHERS
@@ -196,6 +196,8 @@ struct Transport {
 	*/
 	PyObj tls_peer_certificate;
 	PyObj output_queue; /* when SSL_write is not possible */
+	PyObj recv_closed_cb;
+	PyObj send_queued_cb;
 
 	termination_t tls_termination;
 	signed char tls_terminate; /* side being terminated. */
@@ -255,11 +257,13 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 	# ORG, TYPE, ID, NAME, VERSION, OPENSSL_FRAGMENT
 */
 #define X_TLS_PROTOCOLS() \
-	X_TLS_PROTOCOL(ietf.org, RFC, 2246, TLS,  1, 0, TLSv1)    \
-	X_TLS_PROTOCOL(ietf.org, RFC, 4346, TLS,  1, 1, TLSv1_1)  \
-	X_TLS_PROTOCOL(ietf.org, RFC, 5246, TLS,  1, 2, TLSv1_2)  \
+	X_TLS_PROTOCOL(ietf.org, RFC, 2246, TLS,  1, 0, TLSv1)   \
+	X_TLS_PROTOCOL(ietf.org, RFC, 4346, TLS,  1, 1, TLSv1_1) \
+	X_TLS_PROTOCOL(ietf.org, RFC, 5246, TLS,  1, 2, TLSv1_2) \
 	X_TLS_PROTOCOL(ietf.org, RFC, 6101, SSL,  3, 0, SSLv23)
-
+/*
+	# X_TLS_PROTOCOL(ietf.org, RFC, 8446, TLS,  1, 3, TLSv1_3) \
+*/
 #define X_DTLS_PROTOCOLS() \
 	X_TLS_PROTOCOL(ietf.org, RFC, 4347, DTLS, 1, 0, DTLSv1)   \
 	X_TLS_PROTOCOL(ietf.org, RFC, 6347, DTLS, 1, 2, DTLSv1_2)
@@ -383,6 +387,7 @@ pop_openssl_error(call_t call)
 
 /**
 	# Used for objects other than Transports.
+	# XXX: core removed recently; create local exception?
 */
 static void
 set_openssl_error(const char *exc_name, call_t call)
@@ -633,9 +638,7 @@ key_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 
 	k = (Key) subtype->tp_alloc(subtype, 0);
 	if (k == NULL)
-	{
 		return(NULL);
-	}
 
 	Py_RETURN_NONE;
 
@@ -705,6 +708,9 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 	if (tls == NULL)
 		return(NULL);
 
+	tls->recv_closed_cb = NULL;
+	tls->send_queued_cb = NULL;
+
 	tls->output_queue = PyObject_CallFunctionObjArgs(Queue, NULL);
 	if (tls->output_queue == NULL)
 	{
@@ -724,11 +730,10 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 
 	Py_INCREF(((PyObj) ctx));
 
-	/*
-	 * I/O buffers for the connection.
-	 *
-	 * Unlike SSL_new error handling, be noisy about memory errors.
-	 */
+	/**
+		# I/O buffers for the connection.
+		# Unlike SSL_new error handling, be noisy about memory errors.
+	*/
 	rb = BIO_new(BIO_s_mem());
 	wb = BIO_new(BIO_s_mem());
 
@@ -774,17 +779,8 @@ transport_library_error(Transport subject, call_t call)
 		subject->tls_termination = tls_protocol_error;
 		return(-1);
 	}
-	else
-	{
-		if (SSL_get_shutdown(subject->tls_state) & SSL_RECEIVED_SHUTDOWN)
-		{
-			if (subject->tls_termination >= 0)
-				subject->tls_termination = tls_remote_termination;
-		}
 
-		/* no error */
-		return(0);
-	}
+	return(0);
 }
 
 /**
@@ -1334,6 +1330,7 @@ context_methods[] = {
 			"according to the given time parameter."
 		)
 	},
+
 	{NULL,},
 };
 
@@ -1561,14 +1558,12 @@ termination_string(termination_t i)
 			return "local";
 		break;
 
-		case tls_terminating:
-			return "terminating";
-		break;
-
 		case tls_not_terminated:
 			return NULL;
 		break;
 	}
+
+	return NULL;
 }
 
 /**
@@ -1623,7 +1618,14 @@ transport_flush(Transport tls)
 		if (transport_library_error(tls, call_write))
 			r = -2;
 		else
-			r = 0; /* processed nothing */
+		{
+			switch (SSL_get_error(tls->tls_state, xfer))
+			{
+				default:
+					r = 0;
+				break;
+			}
+		}
 	}
 	else
 	{
@@ -1739,11 +1741,6 @@ transport_decipher(PyObj self, PyObj buffer_sequence)
 		xfer = SSL_read(tls->tls_state, bufptr, DEFAULT_READ_SIZE);
 		if (xfer < 1 && transport_library_error(tls, call_read))
 		{
-			/*
-			 * Assign the error to the transport,
-			 * but allow any data to be emitted.
-			 */
-
 			Py_DECREF(buffer);
 			break;
 		}
@@ -1756,10 +1753,46 @@ transport_decipher(PyObj self, PyObj buffer_sequence)
 				return(NULL);
 			}
 		}
+		else
+		{
+			/* Check for termination. */
+			if (tls->recv_closed_cb != NULL && SSL_get_shutdown(tls->tls_state) & SSL_RECEIVED_SHUTDOWN)
+			{
+				PyObj cbout;
 
-		Py_DECREF(buffer); /* New reference owned by rob or error */
+				cbout = PyObject_CallFunction(tls->recv_closed_cb, NULL);
+				Py_DECREF(tls->recv_closed_cb);
+				tls->recv_closed_cb = NULL;
+
+				if (cbout)
+					Py_DECREF(cbout);
+				else
+					PyErr_WriteUnraisable(NULL);
+			}
+
+		}
+
+		Py_DECREF(buffer); /* New reference owned by return list or error */
 	}
 	while (xfer == DEFAULT_READ_SIZE);
+
+	/**
+		# Check if deciphering caused any writes and drain the transmit side
+		# if any callbacks are available.
+	*/
+	if (BIO_ctrl_pending(Transport_GetWriteBuffer(tls))
+		|| SSL_get_error(tls->tls_state, xfer) == SSL_ERROR_WANT_WRITE
+		|| output_buffer_has_content(tls) == 1)
+	{
+		PyObj cbout;
+
+		cbout = PyObject_CallFunction(tls->send_queued_cb, NULL);
+
+		if (cbout)
+			Py_DECREF(cbout);
+		else
+			PyErr_WriteUnraisable(NULL);
+	}
 
 	return(rob);
 }
@@ -1890,7 +1923,6 @@ transport_leak_session(PyObj self)
 	Py_RETURN_NONE;
 }
 
-/* Essentially, SSL_WANT_WRITE, but considers the output queue. */
 static PyObj
 transport_pending_output(PyObj self)
 {
@@ -1943,6 +1975,9 @@ transport_pending_input(PyObj self)
 	return(rob);
 }
 
+/**
+	# Should always be zero.
+*/
 static PyObj
 transport_pending(PyObj self)
 {
@@ -1991,8 +2026,8 @@ transport_terminate(PyObj self, PyObj args)
 	}
 
 	/*
-	 * Both sides must be terminated in order to induce shutdown.
-	 */
+		# Both sides must be terminated in order to induce shutdown.
+	*/
 	if (direction == 0 || tls->tls_terminate + direction == 0)
 	{
 		SSL_shutdown(tls->tls_state);
@@ -2016,13 +2051,54 @@ transport_close_output(PyObj self)
 {
 	Transport tls = (Transport) self;
 
+	if (tls->tls_termination != 0)
+	{
+		Py_INCREF(Py_False);
+		return(Py_False);
+	}
+
 	if (SSL_shutdown(tls->tls_state) < 0)
 	{
 		if (transport_library_error(tls, call_shutdown))
-			return(NULL);
+			Py_RETURN_NONE;
 	}
 
 	tls->tls_termination = tls_local_termination;
+
+	Py_INCREF(Py_True);
+	return(Py_True);
+}
+
+static PyObj
+transport_connect_transmit_ready(PyObj self, PyObj ob)
+{
+	Transport tls = (Transport) self;
+	Py_XDECREF(tls->send_queued_cb);
+
+	if (ob == Py_None)
+		tls->send_queued_cb = NULL;
+	else
+	{
+		tls->send_queued_cb = ob;
+		Py_INCREF(ob);
+	}
+
+	Py_RETURN_NONE;
+}
+
+static PyObj
+transport_connect_receive_closed(PyObj self, PyObj ob)
+{
+	Transport tls = (Transport) self;
+	Py_XDECREF(tls->recv_closed_cb);
+
+	if (ob == Py_None)
+		tls->recv_closed_cb = NULL;
+	else
+	{
+		tls->recv_closed_cb = ob;
+		Py_INCREF(ob);
+	}
 
 	Py_RETURN_NONE;
 }
@@ -2082,6 +2158,12 @@ transport_methods[] = {
 			"Decrypt the ciphertext buffers into a sequence plaintext buffers."
 		)
 	},
+
+	{"connect_transmit_ready", (PyCFunction) transport_connect_transmit_ready,
+		METH_O, PyDoc_STR("set callback to be used when an operation causes transmit data")},
+
+	{"connect_receive_closed", (PyCFunction) transport_connect_receive_closed,
+		METH_O, PyDoc_STR("set callback to be used when peer shutdown has been received")},
 
 	{NULL},
 };
@@ -2345,6 +2427,40 @@ transport_repr(PyObj self)
 	return(rob);
 }
 
+static int
+transport_clear(PyObj self)
+{
+	Transport tls = (Transport) self;
+
+	Py_XDECREF(tls->output_queue);
+	Py_XDECREF(tls->tls_protocol_error);
+	Py_XDECREF(tls->ctx_object);
+	Py_XDECREF(tls->recv_closed_cb);
+	Py_XDECREF(tls->send_queued_cb);
+
+	(tls->output_queue) = NULL;
+	(tls->tls_protocol_error) = NULL;
+	(tls->ctx_object) = NULL;
+	(tls->recv_closed_cb) = NULL;
+	(tls->send_queued_cb) = NULL;
+
+	return(0);
+}
+
+static int
+transport_traverse(PyObj self, visitproc visit, void *arg)
+{
+	Transport tls = (Transport) self;
+
+	Py_VISIT(tls->output_queue);
+	Py_VISIT(tls->tls_protocol_error);
+	Py_VISIT(tls->ctx_object);
+	Py_VISIT(tls->recv_closed_cb);
+	Py_VISIT(tls->send_queued_cb);
+
+	return(0);
+}
+
 static void
 transport_dealloc(PyObj self)
 {
@@ -2353,9 +2469,7 @@ transport_dealloc(PyObj self)
 	if (tls->tls_state == NULL)
 		SSL_free(tls->tls_state);
 
-	Py_XDECREF(tls->output_queue);
-	Py_XDECREF(tls->tls_protocol_error);
-	Py_XDECREF(tls->ctx_object);
+	transport_clear(self);
 }
 
 static PyObj
@@ -2394,10 +2508,11 @@ TransportType = {
 	NULL,                            /* tp_setattro */
 	NULL,                            /* tp_as_buffer */
 	Py_TPFLAGS_BASETYPE|
+	Py_TPFLAGS_HAVE_GC|
 	Py_TPFLAGS_DEFAULT,              /* tp_flags */
 	transport_doc,                   /* tp_doc */
-	NULL,                            /* tp_traverse */
-	NULL,                            /* tp_clear */
+	transport_traverse,              /* tp_traverse */
+	transport_clear,                 /* tp_clear */
 	NULL,                            /* tp_richcompare */
 	0,                               /* tp_weaklistoffset */
 	NULL,                            /* tp_iter */
