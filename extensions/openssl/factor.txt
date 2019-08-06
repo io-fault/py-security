@@ -8,3 +8,4 @@
 	- `fault:c-interfaces`
 	- `python-extension`
 	- `openssl`
+	- `local-sources`
