@@ -392,7 +392,7 @@ pop_openssl_error(call_t call)
 static void
 set_openssl_error(const char *exc_name, call_t call)
 {
-	PyObj err, exc = PyImport_ImportAdjacent("core", exc_name);
+	PyObj err, exc = PyImport_ImportAdjacent("kprotocol", exc_name);
 	if (exc == NULL)
 		return;
 
@@ -723,7 +723,7 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 	tls->tls_state = SSL_new(ctx->tls_context);
 	if (tls->tls_state == NULL)
 	{
-		set_openssl_error("AllocationError", 0);
+		set_openssl_error("Error", 0);
 		Py_DECREF(tls);
 		return(tls);
 	}
@@ -739,7 +739,6 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 
 	if (rb == NULL || wb == NULL)
 	{
-		/* even if the error handling was separated, there would be redundancy */
 		if (rb)
 			BIO_free(rb);
 		if (wb)
@@ -749,7 +748,6 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 		goto fail;
 	}
 
-	/* disables eof condition on the memory bio */
 	BIO_set_mem_eof_return(rb, -1);
 	BIO_set_mem_eof_return(wb, -1);
 
@@ -819,7 +817,7 @@ static int NAME(context_t ctx, PyObj certificates) \
 	{ \
 		certificate_t cert; \
 		\
-		cert = load_pem_certificate(ob, NULL, NULL); /* XXX: select type */ \
+		cert = load_pem_certificate(ob, NULL, NULL); \
 		Py_DECREF(ob); \
 		\
 		if (cert == NULL) \
@@ -852,7 +850,7 @@ static int NAME(context_t ctx, PyObj certificates) \
 	return(1); \
 	\
 	lib_fail: \
-		PyErr_SetString(PyExc_RuntimeError, "openssl fail"); \
+		library_error("Error", 0); \
 	py_fail: \
 		Py_DECREF(pi); \
 		return(0); \
@@ -1488,7 +1486,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 
 	lib_error:
 	{
-		set_openssl_error("ContextError", 0);
+		set_openssl_error("Error", 0);
 	}
 	fail:
 	{
@@ -1810,6 +1808,7 @@ transport_encipher(PyObj self, PyObj buffer_sequence)
 	char wrote = 0;
 	Py_ssize_t queued = 0;
 	PyObj rob, r; /* used to check deque operation results */
+	BIO *wb = Transport_GetWriteBuffer(tls);
 
 	/* Extend queue unconditionally */
 	r = output_buffer_extend(tls, buffer_sequence);
@@ -1856,7 +1855,7 @@ transport_encipher(PyObj self, PyObj buffer_sequence)
 		/**
 			# Avoid early return during tests.
 		*/
-		if (BIO_ctrl_pending(Transport_GetWriteBuffer(tls)) == 0)
+		if (BIO_ctrl_pending(wb) == 0)
 		{
 			return(PyTuple_New(0));
 		}
@@ -1886,7 +1885,7 @@ transport_encipher(PyObj self, PyObj buffer_sequence)
 		/* Only reference to this bytearray, so don't bother with buffer protocol. */
 		bufptr = PyByteArray_AS_STRING(buffer);
 
-		xfer = BIO_read(Transport_GetWriteBuffer(tls), bufptr, DEFAULT_READ_SIZE);
+		xfer = BIO_read(wb, bufptr, DEFAULT_READ_SIZE);
 		if (xfer < 0)
 		{
 			assert(xfer != -2); /* Not Implemented? Memory BIOs implement read */

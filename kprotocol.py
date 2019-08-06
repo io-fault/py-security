@@ -3,8 +3,10 @@
 """
 
 import weakref
-
 from ..kernel import flows
+
+class Error(Exception):
+	pass
 
 class SecuredTransmit(flows.Protocol):
 	"""
