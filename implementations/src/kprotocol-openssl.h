@@ -32,9 +32,6 @@
 
 #include <openssl/objects.h>
 
-#define Transport_GetReadBuffer(tls) (SSL_get_rbio(tls->tls_state))
-#define Transport_GetWriteBuffer(tls) (SSL_get_wbio(tls->tls_state))
-
 #ifdef OPENSSL_NO_EVP
 	#error fault.security transport context requires openssl with EVP
 #endif
@@ -45,6 +42,9 @@
 
 #include <fault/libc.h>
 #include <fault/python/environ.h>
+
+#define Transport_GetReadBuffer(tls) (SSL_get_rbio(tls->tls_state))
+#define Transport_GetWriteBuffer(tls) (SSL_get_wbio(tls->tls_state))
 
 /**
 	# Call codes used to identify the library function that caused an error.
@@ -234,48 +234,42 @@ password_parameter(char *buf, int size, int rwflag, void *u)
 }
 
 #if OPENSSL_VERSION_NUMBER >= 0x1010000fL
-
-/**
-	# TLS methods was changed in 1.1.
-*/
-#define X_TLS_METHODS() X_TLS_METHOD("TLS", TLS)
-#define X_TLS_PROTOCOLS() \
-	X_TLS_PROTOCOL(ietf.org, RFC, 0, TLS,  0, 0, TLS)
-
+	/**
+		# TLS methods were changed in 1.1.
+	*/
+	#define X_TLS_METHODS() X_TLS_METHOD("TLS", TLS)
+	#define X_TLS_PROTOCOLS() \
+		X_TLS_PROTOCOL(ietf.org, RFC, 0, TLS,  0, 0, TLS)
 #else
+	#ifndef OPENSSL_NO_SSL3_METHOD
+		#define _X_TLS_METHOD_SSLv3 X_TLS_METHOD("SSL-3.0", SSLv3)
+	#else
+		#define _X_TLS_METHOD_SSLv3
+	#endif
 
-#ifndef OPENSSL_NO_SSL3_METHOD
-	#define _X_TLS_METHOD_SSLv3 X_TLS_METHOD("SSL-3.0", SSLv3)
-#else
-	#define _X_TLS_METHOD_SSLv3
-#endif
+	/*
+		# OpenSSL V < 1.1 doesn't provide us with an X-Macro of any sort, so hand add as needed.
+		# Might have to rely on some probes at some point... =\
 
-/*
-	# OpenSSL V < 1.1 doesn't provide us with an X-Macro of any sort, so hand add as needed.
-	# Might have to rely on some probes at some point... =\
+		# ORG, TYPE, ID, NAME, VERSION, OPENSSL_FRAGMENT
+	*/
+	#define X_TLS_PROTOCOLS() \
+		X_TLS_PROTOCOL(ietf.org, RFC, 2246, TLS,  1, 0, TLSv1)   \
+		X_TLS_PROTOCOL(ietf.org, RFC, 4346, TLS,  1, 1, TLSv1_1) \
+		X_TLS_PROTOCOL(ietf.org, RFC, 5246, TLS,  1, 2, TLSv1_2) \
+		X_TLS_PROTOCOL(ietf.org, RFC, 6101, SSL,  3, 0, SSLv23)
 
-	# ORG, TYPE, ID, NAME, VERSION, OPENSSL_FRAGMENT
-*/
-#define X_TLS_PROTOCOLS() \
-	X_TLS_PROTOCOL(ietf.org, RFC, 2246, TLS,  1, 0, TLSv1)   \
-	X_TLS_PROTOCOL(ietf.org, RFC, 4346, TLS,  1, 1, TLSv1_1) \
-	X_TLS_PROTOCOL(ietf.org, RFC, 5246, TLS,  1, 2, TLSv1_2) \
-	X_TLS_PROTOCOL(ietf.org, RFC, 6101, SSL,  3, 0, SSLv23)
-/*
-	# X_TLS_PROTOCOL(ietf.org, RFC, 8446, TLS,  1, 3, TLSv1_3) \
-*/
-#define X_DTLS_PROTOCOLS() \
-	X_TLS_PROTOCOL(ietf.org, RFC, 4347, DTLS, 1, 0, DTLSv1)   \
-	X_TLS_PROTOCOL(ietf.org, RFC, 6347, DTLS, 1, 2, DTLSv1_2)
+	/*
+		# X_TLS_PROTOCOL(ietf.org, RFC, 8446, TLS,  1, 3, TLSv1_3) \
+	*/
 
-#define X_TLS_METHODS()               \
-	X_TLS_METHOD("TLS", TLSv1_2)      \
-	X_TLS_METHOD("TLS-1.0", TLSv1)    \
-	X_TLS_METHOD("TLS-1.1", TLSv1_1)  \
-	X_TLS_METHOD("TLS-1.2", TLSv1_2)  \
-	_X_TLS_METHOD_SSLv3 \
-	X_TLS_METHOD("compat",  SSLv23)
-
+	#define X_TLS_METHODS()               \
+		X_TLS_METHOD("TLS", TLSv1_2)      \
+		X_TLS_METHOD("TLS-1.0", TLSv1)    \
+		X_TLS_METHOD("TLS-1.1", TLSv1_1)  \
+		X_TLS_METHOD("TLS-1.2", TLSv1_2)  \
+		_X_TLS_METHOD_SSLv3 \
+		X_TLS_METHOD("compat",  SSLv23)
 #endif
 
 #define X_CERTIFICATE_TYPES() \
