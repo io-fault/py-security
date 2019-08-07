@@ -1,4 +1,4 @@
-from .. import openssl
+from .. import openssl as module
 
 key = b"""
 -----BEGIN RSA PRIVATE KEY-----
@@ -67,19 +67,19 @@ def test_version(test):
 		'version',
 		'ciphers',
 	]
-	m_attributes = dir(openssl)
+	m_attributes = dir(module)
 	for att in attributes:
 		test/m_attributes << att
 
-	test.isinstance(openssl.version, str)
-	test.isinstance(openssl.version_info, tuple)
-	test.isinstance(openssl.version_code, int)
-	test.isinstance(openssl.version_info[0], int)
-	test.isinstance(openssl.version_info[1], int)
-	test.isinstance(openssl.version_info[2], int)
+	test.isinstance(module.version, str)
+	test.isinstance(module.version_info, tuple)
+	test.isinstance(module.version_code, int)
+	test.isinstance(module.version_info[0], int)
+	test.isinstance(module.version_info[1], int)
+	test.isinstance(module.version_info[2], int)
 
 def test_certificate(test):
-	crt = openssl.Certificate(certificate)
+	crt = module.Certificate(certificate)
 	test/crt.type == 'x509'
 
 	if 0:
@@ -92,18 +92,18 @@ def test_certificate(test):
 		print(crt.subject)
 
 def test_no_certificates(test):
-	ctx = openssl.Context()
-	test.isinstance(ctx, openssl.Context)
+	ctx = module.Context()
+	test.isinstance(ctx, module.Context)
 	tls = ctx.connect(None)
-	test.isinstance(tls, openssl.Transport)
+	test.isinstance(tls, module.Transport)
 	tls = ctx.accept()
-	test.isinstance(tls, openssl.Transport)
+	test.isinstance(tls, module.Transport)
 	del tls
 	del ctx
 	test.garbage(0)
 
 def test_Key_generate_rsa(test):
-	k = openssl.Key.generate_rsa(1024)
+	k = module.Key.generate_rsa(1024)
 	if 0:
 		print(str(k))
 		print(repr(k))
@@ -112,8 +112,8 @@ def test_Key_generate_rsa(test):
 	test.garbage(0)
 
 def test_enciphered_transfers(test):
-	sctx = openssl.Context(key = key, certificates = [certificate])
-	cctx = openssl.Context(certificates = [certificate])
+	sctx = module.Context(key = key, certificates = [certificate])
+	cctx = module.Context(certificates = [certificate])
 
 	client = cctx.connect(None)
 	server = sctx.accept()
@@ -150,8 +150,8 @@ def test_enciphered_transfers_signals(test):
 	client_recv_termd = (lambda: signals.add('client-received-close'))
 	server_recv_termd = (lambda: signals.add('server-received-close'))
 
-	sctx = openssl.Context(key = key, certificates = [certificate])
-	cctx = openssl.Context(certificates = [certificate])
+	sctx = module.Context(key = key, certificates = [certificate])
+	cctx = module.Context(certificates = [certificate])
 
 	client = cctx.connect(None)
 	client.connect_transmit_ready(wants_write)
