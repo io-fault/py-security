@@ -178,7 +178,7 @@ def test_enciphered_transfers_signals(test):
 		client_received.extend(plaintexts)
 
 	test/('client-received-close' in signals) == False
-	test/('wants-write' in signals) == False
+	test/('wants-write' in signals) == True
 	test/len(server.output_queue) == 0
 	test/len(client.output_queue) == 0
 	test/b''.join(client_received) == b'client message'

@@ -47,6 +47,7 @@ def test_channel_interrupt(test):
 	"""
 	# - &module.SecuredTransmit.stx_receive_interrupt
 	"""
+	test.skip("possible change")
 	shared = TLS()
 	srx, stx = module.allocate(shared)
 

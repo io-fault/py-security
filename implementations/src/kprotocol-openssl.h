@@ -1776,14 +1776,17 @@ transport_decipher(PyObj self, PyObj buffer_sequence)
 		|| SSL_get_error(tls->tls_state, xfer) == SSL_ERROR_WANT_WRITE
 		|| output_buffer_has_content(tls) == 1)
 	{
-		PyObj cbout;
+		if (tls->send_queued_cb != NULL)
+		{
+			PyObj cbout;
 
-		cbout = PyObject_CallFunction(tls->send_queued_cb, NULL);
+			cbout = PyObject_CallFunction(tls->send_queued_cb, NULL);
 
-		if (cbout)
-			Py_DECREF(cbout);
-		else
-			PyErr_WriteUnraisable(NULL);
+			if (cbout)
+				Py_DECREF(cbout);
+			else
+				PyErr_WriteUnraisable(NULL);
+		}
 	}
 
 	return(rob);
