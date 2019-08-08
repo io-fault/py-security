@@ -184,14 +184,24 @@ def test_enciphered_transfers_signals(test):
 	test/b''.join(client_received) == b'client message'
 	test/b''.join(server_received) == b'server message'
 
+	test/server.receive_closed == False
+	test/client.receive_closed == False
+
+	test/server.transmit_closed == False
 	server.close()
+	test/server.transmit_closed == True
+	test/client.receive_closed == False
 	client.decipher(server.encipher([b""]))
 	test/('client-received-close' in signals) == True
+	test/client.receive_closed == True
 
 	test/('server-received-close' in signals) == False
+	test/client.transmit_closed == False
 	client.close()
+	test/client.transmit_closed == True
 	server.decipher(client.encipher([b""]))
 	test/('server-received-close' in signals) == True
+	test/server.receive_closed == True
 
 if __name__ == '__main__':
 	import sys; from ...test import library as libtest

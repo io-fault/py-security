@@ -204,7 +204,6 @@ struct Transport {
 	PyObj send_queued_cb;
 
 	termination_t tls_termination;
-	signed char tls_terminate; /* side being terminated. */
 };
 typedef struct Transport *Transport;
 
@@ -914,11 +913,6 @@ certificate_members[] = {
 };
 
 /*
-	X509_REQ_get_version
-	X509_REQ_get_subject_name
-	X509_REQ_extract_key
-*/
-/*
 	X509_CRL_get_version(x)
 	X509_CRL_get_lastUpdate(x)
 	X509_CRL_get_nextUpdate(x)
@@ -1607,9 +1601,8 @@ transport_status(PyObj self)
 	Transport tls = (Transport) self;
 	PyObj rob;
 
-	rob = Py_BuildValue("(ssssi)",
+	rob = Py_BuildValue("(sssi)",
 		SSL_get_version(tls->tls_state),
-		termination_string(tls->tls_termination),
 		SSL_state_string(tls->tls_state),
 		SSL_state_string_long(tls->tls_state),
 		SSL_want(tls->tls_state)
@@ -2164,6 +2157,7 @@ transport_members[] = {
 #if OPENSSL_VERSION_NUMBER < 0x1000200fL
 	#define SSL_get0_alpn_selected(X, strptr, intptr) { *intptr = 0; }
 #endif
+
 /**
 	// Get the currently selected application layer protocol.
 */
@@ -2333,11 +2327,26 @@ transport_get_verror(PyObj self, void *_)
 }
 
 static PyObj
-transport_get_terminated(PyObj self, void *_)
+transport_get_receive_closed(PyObj self, void *_)
 {
 	Transport tls = (Transport) self;
 
-	if (SSL_get_shutdown(tls->tls_state))
+	if (SSL_get_shutdown(tls->tls_state) & SSL_RECEIVED_SHUTDOWN)
+	{
+		Py_INCREF(Py_True);
+		return(Py_True);
+	}
+
+	Py_INCREF(Py_False);
+	return(Py_False);
+}
+
+static PyObj
+transport_get_transmit_closed(PyObj self, void *_)
+{
+	Transport tls = (Transport) self;
+
+	if (SSL_get_shutdown(tls->tls_state) & SSL_SENT_SHUTDOWN)
 	{
 		Py_INCREF(Py_True);
 		return(Py_True);
@@ -2383,8 +2392,18 @@ static PyGetSetDef transport_getset[] = {
 		NULL
 	},
 
-	{"terminated", transport_get_terminated, NULL,
-		PyDoc_STR("Whether the shutdown state has been *received*."), NULL
+	{"receive_closed", transport_get_receive_closed, NULL,
+		PyDoc_STR(
+			"Whether shutdown state has been received from the peer."
+		),
+		NULL
+	},
+
+	{"transmit_closed", transport_get_transmit_closed, NULL,
+		PyDoc_STR(
+			"Whether the shutdown state has been sent to the peer."
+		),
+		NULL
 	},
 
 	{NULL,},
