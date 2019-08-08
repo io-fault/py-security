@@ -2534,7 +2534,7 @@ load_implementation(void)
 }
 
 #include <fault/python/module.h>
-INIT(module, PyDoc_STR("kprotocol adapter for OpenSSL.\n"))
+INIT(module, 0, PyDoc_STR("kprotocol adapter for OpenSSL.\n"))
 {
 	PyObj ob;
 
