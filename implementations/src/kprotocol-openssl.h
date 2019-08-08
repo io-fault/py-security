@@ -2473,28 +2473,10 @@ TransportType = {
 
 #define MODULE_FUNCTIONS()
 
-#include <fault/python/module.h>
-INIT(PyDoc_STR("OpenSSL\n"))
+static void load_implementation(void) __attribute__((constructor));
+static void
+load_implementation(void)
 {
-	PyObj ob;
-	PyObj mod = NULL;
-
-	/*
-		// For SSL_write buffer. Needed during negotiations (and handshake).
-	*/
-	if (Queue == NULL)
-	{
-		PyObj qmod;
-		qmod = PyImport_ImportModule("collections");
-		if (qmod == NULL)
-			return(NULL);
-
-		Queue = PyObject_GetAttrString(qmod, "deque");
-		Py_DECREF(qmod);
-		if (Queue == NULL)
-			return(NULL);
-	}
-
 	/*
 		// Initialize OpenSSL.
 	*/
@@ -2508,18 +2490,36 @@ INIT(PyDoc_STR("OpenSSL\n"))
 	ERR_load_BIO_strings();
 	ERR_load_crypto_strings();
 	OpenSSL_add_ssl_algorithms();
+}
 
-	CREATE_MODULE(&mod);
-	if (mod == NULL)
-		return(NULL);
+#include <fault/python/module.h>
+INIT(module, PyDoc_STR("kprotocol adapter for OpenSSL.\n"))
+{
+	PyObj ob;
 
-	if (PyModule_AddIntConstant(mod, "version_code", OPENSSL_VERSION_NUMBER))
+	/*
+		// For SSL_write buffer. Needed during negotiations (and handshake).
+	*/
+	if (Queue == NULL)
+	{
+		PyObj qmod;
+		qmod = PyImport_ImportModule("collections");
+		if (qmod == NULL)
+			return(-1);
+
+		Queue = PyObject_GetAttrString(qmod, "deque");
+		Py_DECREF(qmod);
+		if (Queue == NULL)
+			return(-1);
+	}
+
+	if (PyModule_AddIntConstant(module, "version_code", OPENSSL_VERSION_NUMBER))
 		goto error;
 
-	if (PyModule_AddStringConstant(mod, "version", OPENSSL_VERSION_TEXT))
+	if (PyModule_AddStringConstant(module, "version", OPENSSL_VERSION_TEXT))
 		goto error;
 
-	if (PyModule_AddStringConstant(mod, "ciphers", FAULT_OPENSSL_CIPHERS))
+	if (PyModule_AddStringConstant(module, "ciphers", FAULT_OPENSSL_CIPHERS))
 		goto error;
 
 	/*
@@ -2566,7 +2566,7 @@ INIT(PyDoc_STR("OpenSSL\n"))
 			patch, status
 		);
 
-		if (PyModule_AddObject(mod, "version_info", version_info))
+		if (PyModule_AddObject(module, "version_info", version_info))
 			goto error;
 	}
 
@@ -2576,16 +2576,14 @@ INIT(PyDoc_STR("OpenSSL\n"))
 	#define ID(NAME) \
 		if (PyType_Ready((PyTypeObject *) &( NAME##Type ))) \
 			goto error; \
-		if (PyModule_AddObject(mod, #NAME, (PyObj) &( NAME##Type )) < 0) \
+		if (PyModule_AddObject(module, #NAME, (PyObj) &( NAME##Type )) < 0) \
 			goto error;
 		PYTHON_TYPES()
 	#undef ID
 
-	return(mod);
-
+	return(0);
 	error:
 	{
-		DROP_MODULE(mod);
-		return(NULL);
+		return(-1);
 	}
 }
