@@ -174,6 +174,7 @@ struct Context {
 	PyObject_HEAD
 	context_t tls_context;
 	key_status_t tls_key_status;
+	PyObj ctx_queue_type;
 };
 typedef struct Context *Context;
 
@@ -207,7 +208,6 @@ struct Transport {
 };
 typedef struct Transport *Transport;
 
-static PyObj Queue; /* write queue type; collections.deque */
 static PyTypeObject KeyType, CertificateType, ContextType, TransportType;
 
 /**
@@ -704,7 +704,7 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 	tls->recv_closed_cb = NULL;
 	tls->send_queued_cb = NULL;
 
-	tls->output_queue = PyObject_CallFunctionObjArgs(Queue, NULL);
+	tls->output_queue = PyObject_CallFunctionObjArgs(ctx->ctx_queue_type, NULL);
 	if (tls->output_queue == NULL)
 	{
 		Py_DECREF(tls);
@@ -712,6 +712,7 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 	}
 
 	tls->ctx_object = ctx;
+	Py_INCREF(ctx);
 
 	tls->tls_state = SSL_new(ctx->tls_context);
 	if (tls->tls_state == NULL)
@@ -1330,12 +1331,35 @@ context_members[] = {
 	{NULL,},
 };
 
+static int
+context_clear(PyObj self)
+{
+	Context ctx = (Context) self;
+
+	Py_XDECREF(ctx->ctx_queue_type);
+	ctx->ctx_queue_type = NULL;
+
+	return(0);
+}
+
+static int
+context_traverse(PyObj self, visitproc visit, void *arg)
+{
+	Context ctx = (Context) self;
+
+	Py_VISIT(ctx->ctx_queue_type);
+	return(0);
+}
+
 static void
 context_dealloc(PyObj self)
 {
 	Context ctx = (Context) self;
 
-	SSL_CTX_free(ctx->tls_context);
+	if (ctx->tls_context)
+		SSL_CTX_free(ctx->tls_context);
+
+	context_clear(self);
 }
 
 static PyObj
@@ -1391,6 +1415,22 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	ctx = (Context) subtype->tp_alloc(subtype, 0);
 	if (ctx == NULL)
 		return(NULL);
+
+	/*
+		// For SSL_write buffer. Not many contexts should be created, so cache on instance.
+	*/
+	{
+		PyObj qmod;
+		qmod = PyImport_ImportModule("collections");
+		if (qmod == NULL)
+			goto fail;
+
+		ctx->ctx_queue_type = PyObject_GetAttrString(qmod, "deque");
+		Py_DECREF(qmod);
+
+		if (ctx->ctx_queue_type == NULL)
+			goto fail;
+	}
 
 	/*
 		// The key is checked and loaded later.
@@ -1511,10 +1551,11 @@ ContextType = {
 	NULL,                            /* tp_setattro */
 	NULL,                            /* tp_as_buffer */
 	Py_TPFLAGS_BASETYPE|
+	Py_TPFLAGS_HAVE_GC|
 	Py_TPFLAGS_DEFAULT,              /* tp_flags */
 	context_doc,                     /* tp_doc */
-	NULL,                            /* tp_traverse */
-	NULL,                            /* tp_clear */
+	context_traverse,                /* tp_traverse */
+	context_clear,                   /* tp_clear */
 	NULL,                            /* tp_richcompare */
 	0,                               /* tp_weaklistoffset */
 	NULL,                            /* tp_iter */
@@ -2496,22 +2537,6 @@ load_implementation(void)
 INIT(module, PyDoc_STR("kprotocol adapter for OpenSSL.\n"))
 {
 	PyObj ob;
-
-	/*
-		// For SSL_write buffer. Needed during negotiations (and handshake).
-	*/
-	if (Queue == NULL)
-	{
-		PyObj qmod;
-		qmod = PyImport_ImportModule("collections");
-		if (qmod == NULL)
-			return(-1);
-
-		Queue = PyObject_GetAttrString(qmod, "deque");
-		Py_DECREF(qmod);
-		if (Queue == NULL)
-			return(-1);
-	}
 
 	if (PyModule_AddIntConstant(module, "version_code", OPENSSL_VERSION_NUMBER))
 		goto error;
