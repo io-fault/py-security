@@ -381,7 +381,6 @@ pop_openssl_error(call_t call)
 
 /**
 	// Used for objects other than Transports.
-	// XXX: core removed recently; create local exception?
 */
 static void
 set_openssl_error(const char *exc_name, call_t call)
@@ -1287,7 +1286,7 @@ context_connect(PyObj self, PyObj hostname)
 }
 
 static PyObj
-context_void_sessions(PyObj self, PyObj args)
+context_reset_sessions(PyObj self, PyObj args)
 {
 	Context ctx = (Context) self;
 	long t = 0;
@@ -1316,7 +1315,7 @@ context_methods[] = {
 		)
 	},
 
-	{"void_sessions", (PyCFunction) context_void_sessions,
+	{"reset", (PyCFunction) context_reset_sessions,
 		METH_VARARGS, PyDoc_STR(
 			"Remove the sessions from the context that have expired "
 			"according to the given time parameter."
@@ -1907,7 +1906,7 @@ transport_encipher(PyObj self, PyObj buffer_sequence)
 }
 
 static PyObj
-transport_leak_session(PyObj self)
+transport_leak(PyObj self)
 {
 	Transport tls = (Transport) self;
 
@@ -1988,58 +1987,6 @@ transport_pending(PyObj self)
 }
 
 /**
-	// Must be performed for both directions to cause SSL_shutdown().
-	// Currently, this method does not sequence termination properly.
-*/
-static PyObj
-transport_terminate(PyObj self, PyObj args)
-{
-	Transport tls = (Transport) self;
-	int direction = 0;
-
-	if (!PyArg_ParseTuple(args, "|i", &direction))
-		return(NULL);
-
-	switch (direction)
-	{
-		case 1:
-		case -1:
-		case 0:
-			/* validity check */
-		break;
-
-		default:
-			PyErr_SetString(PyExc_ValueError, "invalid termination polarity; must be 1 or -1");
-			return(NULL);
-		break;
-	}
-
-	if (tls->tls_termination != 0)
-	{
-		/* signals that shutdown seq was already initiated or done */
-		Py_INCREF(Py_False);
-		return(Py_False);
-	}
-
-	/*
-		// Both sides must be terminated in order to induce shutdown.
-	*/
-	if (direction == 0 || tls->tls_terminate + direction == 0)
-	{
-		SSL_shutdown(tls->tls_state);
-		tls->tls_termination = tls_local_termination;
-	}
-	else
-	{
-		tls->tls_terminate += direction;
-		Py_RETURN_NONE;
-	}
-
-	Py_INCREF(Py_True);
-	return(Py_True); /* signals that shutdown has been initiated */
-}
-
-/**
 	// Close writes.
 */
 static PyObj
@@ -2103,14 +2050,13 @@ static PyMethodDef
 transport_methods[] = {
 	{"status", (PyCFunction) transport_status,
 		METH_NOARGS, PyDoc_STR(
-			"Get the transport's status. XXX: ambiguous docs"
+			"Get the transport's status."
 		)
 	},
 
-	{"leak_session", (PyCFunction) transport_leak_session,
+	{"leak", (PyCFunction) transport_leak,
 		METH_NOARGS, PyDoc_STR(
-			"Force the transport's session to be leaked regardless of its shutdown state.\n"
-			"&<http://www.openssl.org/docs/ssl/SSL_set_shutdown.html>"
+			"Inhibit close from being transmitted to the peer."
 		)
 	},
 
@@ -2129,13 +2075,6 @@ transport_methods[] = {
 	{"pending_output", (PyCFunction) transport_pending_output,
 		METH_NOARGS, PyDoc_STR(
 			"Whether or not the Transport needs to write data."
-		)
-	},
-
-	{"terminate", (PyCFunction) transport_terminate,
-		METH_VARARGS, PyDoc_STR(
-			"Initiate the shutdown sequence for the TLS state. "
-			"Enciphered reads and writes must be performed in order to complete the sequence."
 		)
 	},
 
@@ -2388,7 +2327,7 @@ static PyGetSetDef transport_getset[] = {
 		NULL,
 	},
 
-	{"peer_certificate", transport_get_peer_certificate, NULL,
+	{"peer", transport_get_peer_certificate, NULL,
 		PyDoc_STR(
 			"Get the peer certificate. If the Transport has yet to receive it, "
 			"&None will be returned."
