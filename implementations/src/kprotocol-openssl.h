@@ -1944,10 +1944,6 @@ transport_leak(PyObj self)
 {
 	Transport tls = (Transport) self;
 
-	/*
-		// Subsequent terminate() call will not notify the peer.
-	*/
-
 	SSL_set_quiet_shutdown(tls->tls_state, 1);
 	Py_RETURN_NONE;
 }
@@ -1956,68 +1952,14 @@ static PyObj
 transport_pending_output(PyObj self)
 {
 	Transport tls = (Transport) self;
-	PyObj rob;
-
-	if (BIO_ctrl_pending(Transport_GetWriteBuffer(tls)))
-		rob = Py_True;
-	else
-	{
-		/* must be true if output buffer has data */
-
-		switch (output_buffer_has_content(tls))
-		{
-			case 1:
-				rob = Py_True;
-			break;
-
-			case 0:
-				rob = Py_False;
-			break;
-
-			default:
-				return(NULL); /* Python Error */
-			break;
-		}
-	}
-
-	Py_INCREF(rob);
-	return(rob);
+	return(PyLong_FromLong(BIO_pending(Transport_GetWriteBuffer(tls))));
 }
 
-/**
-	// Pending reads or data in read buffer (potential read).
-*/
 static PyObj
 transport_pending_input(PyObj self)
 {
 	Transport tls = (Transport) self;
-	PyObj rob;
-
-	if (BIO_ctrl_pending(Transport_GetWriteBuffer(tls)))
-		rob = Py_True;
-	else if (SSL_pending(tls->tls_state))
-		rob = Py_True;
-	else
-		rob = Py_False;
-
-	Py_INCREF(rob);
-	return(rob);
-}
-
-/**
-	// Should always be zero.
-*/
-static PyObj
-transport_pending(PyObj self)
-{
-	Transport tls = (Transport) self;
-	int nbytes;
-	PyObj rob;
-
-	nbytes = SSL_pending(tls->tls_state);
-	rob = PyLong_FromLong((long) nbytes);
-
-	return(rob);
+	return(PyLong_FromLong(SSL_pending(tls->tls_state)));
 }
 
 /**
@@ -2091,12 +2033,6 @@ transport_methods[] = {
 	{"leak", (PyCFunction) transport_leak,
 		METH_NOARGS, PyDoc_STR(
 			"Inhibit close from being transmitted to the peer."
-		)
-	},
-
-	{"pending", (PyCFunction) transport_pending,
-		METH_NOARGS, PyDoc_STR(
-			"Return the number of bytes available for reading."
 		)
 	},
 
@@ -2277,12 +2213,7 @@ transport_get_peer_certificate(PyObj self, void *_)
 		certificate_t c;
 
 		c = SSL_get_peer_certificate(tls->tls_state);
-		if (c == NULL)
-		{
-			/* XXX: pop openssl error */
-			;
-		}
-		else
+		if (c != NULL)
 		{
 			crt = (Certificate) CertificateType.tp_alloc(&CertificateType, 0);
 
