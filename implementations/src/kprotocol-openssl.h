@@ -1315,17 +1315,14 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	char *ciphers = FAULT_OPENSSL_CIPHERS;
 	char *protocol = "TLS";
 
-	int allow_ssl_v2 = 0;
-
 	if (!PyArg_ParseTupleAndKeywords(args, kw,
-		"|Os#OOssp", kwlist,
+		"|Os#OOss", kwlist,
 		&key_ob,
 		&(pwp.words), &(pwp.length),
 		&certificates,
 		&requirements,
 		&protocol,
-		&ciphers,
-		&allow_ssl_v2
+		&ciphers
 	))
 		return(NULL);
 
@@ -1384,15 +1381,15 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	}
 
 	#ifdef SSL_OP_NO_SSLv2
-		if (!allow_ssl_v2)
-		{
-			/*
-				// Require exlicit override to allow this.
-			*/
-			SSL_CTX_set_options(ctx->tls_context, SSL_OP_NO_SSLv2);
-		}
-	#else
-		/* No, SSL_OP_NO_SSLv2 defined by openssl headers */
+		SSL_CTX_set_options(ctx->tls_context, SSL_OP_NO_SSLv2);
+	#endif
+
+	#ifdef SSL_OP_NO_SSLv3
+		SSL_CTX_set_options(ctx->tls_context, SSL_OP_NO_SSLv3);
+	#endif
+
+	#ifdef SSL_OP_NO_TLSv1
+		SSL_CTX_set_options(ctx->tls_context, SSL_OP_NO_TLSv1);
 	#endif
 
 	if (!SSL_CTX_set_cipher_list(ctx->tls_context, ciphers))
@@ -2344,6 +2341,7 @@ load_implementation(void)
 	ERR_load_BIO_strings();
 	ERR_load_crypto_strings();
 	OpenSSL_add_ssl_algorithms();
+	ERR_clear_error();
 }
 
 static int
