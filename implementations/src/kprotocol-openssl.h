@@ -732,7 +732,7 @@ static int NAME(context_t ctx, PyObj certificates) \
 	\
 	ob = PyIter_Next(pi); \
 	if (PyErr_Occurred()) \
-		goto py_fail; \
+		goto error; \
 	\
 	if (ob != NULL) \
 	{ \
@@ -744,37 +744,39 @@ static int NAME(context_t ctx, PyObj certificates) \
 		if (cert == NULL) \
 		{ \
 			if (PyErr_Occurred()) \
-				goto py_fail; \
+				goto error; \
 			else \
-				goto lib_fail; \
+				goto ierror; \
 		} \
 		\
 		if (!INITIAL(ctx, cert)) \
-			goto lib_fail; \
+			goto ierror; \
 		\
 		while ((ob = PyIter_Next(pi))) \
 		{ \
 			if (PyErr_Occurred()) \
-				goto py_fail; \
+				goto error; \
 			\
 			cert = load_pem_certificate(ob, NULL, NULL); \
 			Py_DECREF(ob); \
 			\
 			if (cert == NULL) \
-				goto lib_fail; \
+				goto ierror; \
 			if (!SUBSEQUENT(ctx, cert)) \
-				goto lib_fail; \
+				goto ierror; \
 		} \
 	} \
 	\
 	Py_DECREF(pi); \
 	return(1); \
 	\
-	lib_fail: \
-		library_error("Error", 0); \
-	py_fail: \
+	ierror: \
+		set_openssl_error("Error", 0); \
+	error: \
+	{ \
 		Py_DECREF(pi); \
 		return(0); \
+	}\
 }
 
 CERT_INIT_LOOP(load_certificate_chain, SSL_CTX_use_certificate, SSL_CTX_add_extra_chain_cert)
@@ -970,7 +972,7 @@ long_from_asn1_integer(ASN1_INTEGER *i)
 static PyObj
 certificate_get_type(PyObj self, void *p)
 {
-	return (PyUnicode_FromString("x509"));
+	return(PyUnicode_FromString("x509"));
 }
 
 static PyGetSetDef certificate_getset[] = {
@@ -1062,9 +1064,7 @@ certificate_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 
 	cert = (Certificate) subtype->tp_alloc(subtype, 0);
 	if (cert == NULL)
-	{
 		return(NULL);
-	}
 
 	cert->lib_crt = load_pem_certificate(pem, password_parameter, &pwp);
 	if (cert->lib_crt == NULL)
@@ -1074,9 +1074,11 @@ certificate_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 
 	lib_error:
 		set_openssl_error("Error", 0);
-	fail:
+	error:
+	{
 		Py_XDECREF(cert);
 		return(NULL);
+	}
 }
 
 PyDoc_STRVAR(certificate_doc, "OpenSSL X509 Certificate Objects");
