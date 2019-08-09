@@ -202,8 +202,6 @@ struct Transport {
 	PyObj output_queue; /* when SSL_write is not possible */
 	PyObj recv_closed_cb;
 	PyObj send_queued_cb;
-
-	termination_t tls_termination;
 };
 typedef struct Transport *Transport;
 
@@ -698,7 +696,6 @@ transport_library_error(Transport subject, call_t call)
 	if (ERR_peek_error())
 	{
 		subject->tls_protocol_error = pop_openssl_error(call);
-		subject->tls_termination = tls_protocol_error;
 		return(-1);
 	}
 
@@ -1498,31 +1495,6 @@ ContextType = {
 	context_new,                     /* tp_new */
 };
 
-static const char *
-termination_string(termination_t i)
-{
-	switch (i)
-	{
-		case tls_protocol_error:
-			return "error";
-		break;
-
-		case tls_remote_termination:
-			return "remote";
-		break;
-
-		case tls_local_termination:
-			return "local";
-		break;
-
-		case tls_not_terminated:
-			return NULL;
-		break;
-	}
-
-	return NULL;
-}
-
 /**
 	// extract the status of the TLS connection
 */
@@ -1901,19 +1873,11 @@ transport_close_output(PyObj self)
 {
 	Transport tls = (Transport) self;
 
-	if (tls->tls_termination != 0)
-	{
-		Py_INCREF(Py_False);
-		return(Py_False);
-	}
-
 	if (SSL_shutdown(tls->tls_state) < 0)
 	{
 		if (transport_library_error(tls, call_shutdown))
 			Py_RETURN_NONE;
 	}
-
-	tls->tls_termination = tls_local_termination;
 
 	Py_INCREF(Py_True);
 	return(Py_True);
