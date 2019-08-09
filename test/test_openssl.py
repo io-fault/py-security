@@ -102,15 +102,6 @@ def test_no_certificates(test):
 	del ctx
 	test.garbage(0)
 
-def test_Key_generate_rsa(test):
-	k = module.Key.generate_rsa(1024)
-	if 0:
-		print(str(k))
-		print(repr(k))
-		print(k.type)
-	del k
-	test.garbage(0)
-
 def test_enciphered_transfers(test):
 	sctx = module.Context(key = key, certificates = [certificate])
 	cctx = module.Context(certificates = [certificate])

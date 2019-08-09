@@ -396,69 +396,6 @@ set_openssl_error(const char *exc_name, call_t call)
 }
 
 static PyObj
-key_generate_rsa(PyTypeObject *subtype, PyObj args, PyObj kw)
-{
-	static char *kwlist[] = {
-		"bits",
-		"engine",
-		NULL
-	};
-	unsigned long bits = 2048;
-
-	EVP_PKEY_CTX *ctx = NULL;
-	EVP_PKEY *pkey = NULL;
-	Key k;
-
-	if (!PyArg_ParseTupleAndKeywords(args, kw, "|ks", kwlist, &bits))
-		return(NULL);
-
-	ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, NULL);
-	if (ctx == NULL)
-	{
-		goto lib_error;
-	}
-
-	if (EVP_PKEY_keygen_init(ctx) <= 0)
-	{
-		goto lib_error;
-	}
-
-	if (EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, bits) <= 0)
-	{
-		goto lib_error;
-	}
-
-	if (EVP_PKEY_keygen(ctx, &pkey) <= 0)
-	{
-		goto lib_error;
-	}
-
-	EVP_PKEY_CTX_free(ctx);
-	ctx = NULL;
-
-	k = (Key) subtype->tp_alloc(subtype, 0);
-	if (k == NULL)
-	{
-		return(NULL);
-	}
-	else
-	{
-		k->lib_key = pkey;
-	}
-
-	return((PyObj) k);
-
-	lib_error:
-	{
-		if (ctx != NULL)
-			EVP_PKEY_CTX_free(ctx);
-
-		set_openssl_error("Error", 0);
-		return(NULL);
-	}
-}
-
-static PyObj
 key_encrypt(PyObj self, PyObj data)
 {
 	Py_RETURN_NONE;
@@ -486,12 +423,6 @@ key_verify(PyObj self, PyObj data)
 
 static PyMethodDef
 key_methods[] = {
-	{"generate_rsa", (PyCFunction) key_generate_rsa,
-		METH_CLASS|METH_VARARGS|METH_KEYWORDS, PyDoc_STR(
-			"Generate an Key [Usually a pair]."
-		)
-	},
-
 	{"encrypt", (PyCFunction) key_encrypt,
 		METH_O, PyDoc_STR(
 			"Encrypt the given binary data."
