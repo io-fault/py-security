@@ -840,14 +840,6 @@ certificate_members[] = {
 	{NULL,},
 };
 
-/*
-	X509_CRL_get_version(x)
-	X509_CRL_get_lastUpdate(x)
-	X509_CRL_get_nextUpdate(x)
-	X509_CRL_get_issuer(x)
-	X509_CRL_get_REVOKED(x)
-*/
-
 static PyObj
 key_from_lib_key(EVP_PKEY *k)
 {
