@@ -504,7 +504,7 @@ key_repr(PyObj self)
 	PyObj rob;
 	Key k = (Key) self;
 
-	rob = PyUnicode_FromFormat("<openssl.Key[%s] %p>", key_type_string(k), k);
+	rob = PyUnicode_FromFormat("<%s[%s] %p>", Py_TYPE(self)->tp_name, key_type_string(k), k);
 	return(rob);
 }
 
@@ -1015,7 +1015,7 @@ certificate_repr(PyObj self)
 	size = BIO_get_mem_data(b, &ptr);
 
 	sn_ob = Py_BuildValue("s#", ptr, size);
-	rob = PyUnicode_FromFormat("<%s [%U] %p>", Py_TYPE(cert)->tp_name, sn_ob, cert);
+	rob = PyUnicode_FromFormat("<%s [%U] %p>", Py_TYPE(self)->tp_name, sn_ob, cert);
 
 	BIO_free(b);
 
@@ -1285,7 +1285,7 @@ context_repr(PyObj self)
 	Context ctx = (Context) self;
 	PyObj rob;
 
-	rob = PyUnicode_FromFormat("<%s %p>", Py_TYPE(ctx)->tp_name, ctx);
+	rob = PyUnicode_FromFormat("<%s %p>", Py_TYPE(self)->tp_name, ctx);
 	return(rob);
 }
 
