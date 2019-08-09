@@ -2331,11 +2331,9 @@ load_implementation(void)
 	OpenSSL_add_ssl_algorithms();
 }
 
-#include <fault/python/module.h>
-INIT(module, 0, PyDoc_STR("kprotocol adapter for OpenSSL."))
+static int
+init_implementation_data(PyObj module)
 {
-	PyObj ob;
-
 	if (PyModule_AddIntConstant(module, "version_code", OPENSSL_VERSION_NUMBER))
 		goto error;
 
