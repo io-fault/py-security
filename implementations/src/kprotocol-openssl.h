@@ -326,8 +326,7 @@ X_READ_OPENSSL_OBJECT(pki_key_t, load_pem_public_key, PEM_read_bio_PUBKEY)
 #undef X_READ_OPENSSL_OBJECT
 
 /**
-	// OpenSSL uses a per-thread error queue, but
-	// there is storage space on Transport for explicit association.
+	// OpenSSL uses a per-thread error queue.
 */
 static PyObj
 pop_openssl_error(call_t call)
@@ -565,7 +564,7 @@ key_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 
 	lib_error:
 		set_openssl_error("Error", 0);
-	fail:
+	error:
 		Py_XDECREF(k);
 		return(NULL);
 }
@@ -667,7 +666,7 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 			BIO_free(wb);
 
 		PyErr_SetString(PyExc_MemoryError, mem_err_str);
-		goto fail;
+		goto error;
 	}
 
 	BIO_set_mem_eof_return(rb, -1);
@@ -677,7 +676,7 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 
 	return(tls);
 
-	fail:
+	error:
 	{
 		Py_DECREF(tls);
 		return(NULL);
@@ -819,7 +818,7 @@ certificate_open(PyTypeObject *subtype, PyObj args, PyObj kw)
 
 	lib_error:
 		set_openssl_error("Error", 0);
-	fail:
+	error:
 	{
 		Py_DECREF(cert);
 		return(NULL);
@@ -1337,13 +1336,13 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		PyObj qmod;
 		qmod = PyImport_ImportModule("collections");
 		if (qmod == NULL)
-			goto fail;
+			goto error;
 
 		ctx->ctx_queue_type = PyObject_GetAttrString(qmod, "deque");
 		Py_DECREF(qmod);
 
 		if (ctx->ctx_queue_type == NULL)
-			goto fail;
+			goto error;
 	}
 
 	/*
@@ -1362,14 +1361,14 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		else
 		{
 			PyErr_SetString(PyExc_ValueError, "invalid 'protocol' argument");
-			goto fail;
+			goto error;
 		}
 	#undef X_TLS_METHOD
 
 	if (ctx->tls_context == NULL)
 	{
 		/* XXX: check for openssl failure */
-		goto lib_error;
+		goto ierror;
 	}
 	else
 	{
@@ -1393,7 +1392,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	#endif
 
 	if (!SSL_CTX_set_cipher_list(ctx->tls_context, ciphers))
-		goto lib_error;
+		goto ierror;
 
 	/*
 		// Load certificates.
@@ -1401,13 +1400,13 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	if (certificates != NULL)
 	{
 		if (!load_certificate_chain(ctx->tls_context, certificates))
-			goto lib_error;
+			goto ierror;
 	}
 
 	if (requirements != NULL)
 	{
 		if (!load_client_requirements(ctx->tls_context, requirements))
-			goto lib_error;
+			goto ierror;
 	}
 
 	if (key_ob != NULL)
@@ -1417,7 +1416,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		key = load_pem_private_key(key_ob, password_parameter, &pwp);
 		if (key == NULL)
 		{
-			goto lib_error;
+			goto ierror;
 		}
 
 		if (SSL_CTX_use_PrivateKey(ctx->tls_context, key)
@@ -1425,17 +1424,18 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 			ctx->tls_key_status = key_available;
 		else
 		{
-			goto lib_error;
+			goto ierror;
 		}
 	}
 
 	return((PyObj) ctx);
 
-	lib_error:
+	ierror:
 	{
 		set_openssl_error("Error", 0);
 	}
-	fail:
+
+	error:
 	{
 		Py_XDECREF(ctx);
 		return(NULL);
