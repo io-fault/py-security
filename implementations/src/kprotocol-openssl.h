@@ -2358,7 +2358,7 @@ transport_get_transmit_closed(PyObj self, void *_)
 
 static PyGetSetDef transport_getset[] = {
 	{"application", transport_get_application, NULL,
-		PyDoc_STR("The application protocol specified by the Transport as a bytes instance.\n"),
+		PyDoc_STR("The application protocol specified by the Transport as a bytes instance."),
 		NULL,
 	},
 
@@ -2368,12 +2368,12 @@ static PyGetSetDef transport_getset[] = {
 	},
 
 	{"protocol", transport_get_protocol, NULL,
-		PyDoc_STR("The protocol used by the Transport as a tuple: (name, major, minor).\n"),
+		PyDoc_STR("The protocol used by the Transport as a tuple: (name, major, minor)."),
 		NULL,
 	},
 
 	{"standard", transport_get_standard, NULL,
-		PyDoc_STR("The protocol standard used by the Transport as a tuple: (org, std, id).\n"),
+		PyDoc_STR("The protocol standard used by the Transport as a tuple: (org, std, id)."),
 		NULL,
 	},
 
@@ -2553,7 +2553,7 @@ load_implementation(void)
 }
 
 #include <fault/python/module.h>
-INIT(module, 0, PyDoc_STR("kprotocol adapter for OpenSSL.\n"))
+INIT(module, 0, PyDoc_STR("kprotocol adapter for OpenSSL."))
 {
 	PyObj ob;
 
