@@ -1138,12 +1138,15 @@ context_accept(PyObj self)
 	SSL_set_accept_state(tls->tls_state);
 
 	if (SSL_do_handshake(tls->tls_state) != 0 && library_error("Error", call_handshake))
-	{
-		Py_DECREF(tls);
-		return(NULL);
-	}
+		goto error;
 
 	return((PyObj) tls);
+
+	error:
+	{
+		Py_DECREF((PyObj) tls);
+		return(NULL);
+	}
 }
 
 static int
@@ -1192,8 +1195,10 @@ context_connect(PyObj self, PyObj hostname)
 	return((PyObj) tls);
 
 	error:
+	{
 		Py_DECREF((PyObj) tls);
 		return(NULL);
+	}
 }
 
 static PyObj
@@ -2144,22 +2149,30 @@ transport_get_transmit_closed(PyObj self, void *_)
 
 static PyGetSetDef transport_getset[] = {
 	{"application", transport_get_application, NULL,
-		PyDoc_STR("The application protocol specified by the Transport as a bytes instance."),
+		PyDoc_STR(
+			"The application protocol specified by the Transport as a bytes instance."
+		),
 		NULL,
 	},
 
 	{"hostname", transport_get_hostname, NULL,
-		PyDoc_STR("Get the hostname used by the Transport"),
+		PyDoc_STR(
+			"Get the hostname used by the Transport"
+		),
 		NULL,
 	},
 
 	{"protocol", transport_get_protocol, NULL,
-		PyDoc_STR("The protocol used by the Transport as a tuple: (name, major, minor)."),
+		PyDoc_STR(
+			"The protocol used by the Transport as a tuple: (name, major, minor)."
+		),
 		NULL,
 	},
 
 	{"standard", transport_get_standard, NULL,
-		PyDoc_STR("The protocol standard used by the Transport as a tuple: (org, std, id)."),
+		PyDoc_STR(
+			"The protocol standard used by the Transport as a tuple: (org, std, id)."
+		),
 		NULL,
 	},
 
@@ -2392,7 +2405,7 @@ init_implementation_data(PyObj module)
 	}
 
 	/*
-		// Initialize types.
+		// Initialize types
 	*/
 	#define ID(NAME) \
 		if (PyType_Ready((PyTypeObject *) &( NAME##Type ))) \
