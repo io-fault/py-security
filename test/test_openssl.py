@@ -85,11 +85,10 @@ def test_certificate(test):
 	if 0:
 		print(str(crt))
 		print(repr(crt))
-		print(crt.version)
-		print(crt.not_before_string)
-		print(crt.not_after_string)
-		print(crt.public_key)
-		print(crt.subject)
+		print('version', crt.version)
+		print('not-before', crt.not_before_string)
+		print('not-after', crt.not_after_string)
+		print('subject', crt.subject)
 
 def test_no_certificates(test):
 	ctx = module.Context()

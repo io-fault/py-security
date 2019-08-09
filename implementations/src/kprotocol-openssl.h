@@ -920,13 +920,9 @@ str_from_asn1_time(ASN1_TIME *t)
 		// millennium parts of the year.
 	*/
 
-	#if OPENSSL_VERSION_NUMBER >= 0x1010000fL
-		gt = ASN1_TIME_to_generalizedtime(t, NULL);
-	#else
-		gt = ASN1_TIME_to_generalizedtime(t, NULL);
-		rob = PyUnicode_FromStringAndSize((const char *) M_ASN1_STRING_data(gt), M_ASN1_STRING_length(gt));
-		M_ASN1_GENERALIZEDTIME_free(gt);
-	#endif
+	gt = ASN1_TIME_to_generalizedtime(t, NULL);
+	rob = PyUnicode_FromStringAndSize((const char *) ASN1_STRING_get0_data(gt), ASN1_STRING_length(gt));
+	ASN1_STRING_free(gt);
 
 	return(rob);
 }
