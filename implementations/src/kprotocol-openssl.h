@@ -2125,34 +2125,6 @@ transport_get_peer_certificate(PyObj self, void *_)
 }
 
 static PyObj
-transport_get_verror(PyObj self, void *_)
-{
-	Transport tls = (Transport) self;
-	PyObj rob = NULL;
-	long vr;
-
-	vr = SSL_get_verify_result(tls->tls_state);
-	switch (vr)
-	{
-		case X509_V_OK:
-			Py_INCREF(Py_None);
-			return(Py_None);
-		break;
-
-		default:
-		{
-			const char *s;
-			s = X509_verify_cert_error_string(vr);
-			rob = Py_BuildValue("(ls)", vr, s);
-		}
-		break;
-	}
-
-	Py_INCREF(Py_False);
-	return(Py_False);
-}
-
-static PyObj
 transport_get_receive_closed(PyObj self, void *_)
 {
 	Transport tls = (Transport) self;
@@ -2207,13 +2179,6 @@ static PyGetSetDef transport_getset[] = {
 		PyDoc_STR(
 			"Get the peer certificate. If the Transport has yet to receive it, "
 			"&None will be returned."
-		),
-		NULL
-	},
-
-	{"verror", transport_get_verror, NULL,
-		PyDoc_STR(
-			"Verification error. &None if verified, otherise, a pair."
 		),
 		NULL
 	},
