@@ -2253,6 +2253,80 @@ transport_dealloc(PyObj self)
 }
 
 static PyObj
+transport_new_server(PyTypeObject *typ, Context ctx)
+{
+	Transport tls;
+
+	tls = create_tls_state(typ, ctx);
+	if (tls == NULL)
+		return(NULL);
+
+	SSL_set_accept_state(tls->tls_state);
+
+	if (SSL_do_handshake(tls->tls_state) != 0 && library_error("Error", call_handshake))
+		goto error;
+
+	return((PyObj) tls);
+
+	error:
+	{
+		Py_DECREF((PyObj) tls);
+		return(NULL);
+	}
+}
+
+static PyObj
+transport_new_client(PyTypeObject *typ, Context ctx, PyObj hostname)
+{
+	Transport tls;
+
+	tls = create_tls_state(typ, ctx);
+	if (tls == NULL)
+		return(NULL);
+
+	if (hostname != NULL)
+	{
+		if (_transport_set_hostname(tls, hostname))
+			goto error;
+	}
+
+	SSL_set_connect_state(tls->tls_state);
+
+	if (SSL_do_handshake(tls->tls_state) != 0 && library_error("Error", call_handshake))
+		goto error;
+
+	return((PyObj) tls);
+
+	error:
+	{
+		Py_DECREF((PyObj) tls);
+		return(NULL);
+	}
+}
+
+#ifndef ADAPTER_TRANSPORT_NEW
+	#define ADAPTER_TRANSPORT_NEW create_tls_state
+#endif
+
+#if defined(ADAPTER_CLIENT)
+static PyObj
+transport_new(PyTypeObject *subtype, PyObj args, PyObj kw)
+{
+	static char *kwlist[] = {"context", "hostname", "certificate", NULL,};
+	Context ctx = NULL;
+	PyObj hostname = NULL;
+	PyObj crt = NULL;
+
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "O|OO", kwlist,
+			&ctx,
+			&hostname,
+			&crt))
+		return(NULL);
+
+	return(ADAPTER_TRANSPORT_NEW(subtype, ctx, hostname));
+}
+#else
+static PyObj
 transport_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 {
 	static char *kwlist[] = {"context", NULL,};
@@ -2261,8 +2335,9 @@ transport_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	if (!PyArg_ParseTupleAndKeywords(args, kw, "O", kwlist, &ctx))
 		return(NULL);
 
-	return((PyObj) create_tls_state(subtype, ctx));
+	return(ADAPTER_TRANSPORT_NEW(subtype, ctx));
 }
+#endif
 
 PyDoc_STRVAR(transport_doc, "OpenSSL Secure Transfer State.");
 
