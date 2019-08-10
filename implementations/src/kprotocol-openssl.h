@@ -1373,6 +1373,18 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		SSL_CTX_set_options(ctx->tls_context, SSL_OP_NO_TLSv1);
 	#endif
 
+	#ifdef SSL_OP_NO_CLIENT_RENEGOTIATION
+		SSL_CTX_set_options(ctx->tls_context, SSL_OP_NO_CLIENT_RENEGOTIATION);
+	#endif
+
+	#ifdef SSL_MODE_RELEASE_BUFFERS
+		SSL_CTX_set_mode(ctx->tls_context, SSL_MODE_RELEASE_BUFFERS);
+	#endif
+
+	#ifdef SSL_MODE_NO_AUTO_CHAIN
+		SSL_CTX_set_mode(ctx->tls_context, SSL_MODE_NO_AUTO_CHAIN);
+	#endif
+
 	if (!SSL_CTX_set_cipher_list(ctx->tls_context, ciphers))
 		goto ierror;
 
