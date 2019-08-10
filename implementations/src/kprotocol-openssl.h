@@ -1296,9 +1296,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		"password",
 		"certificates",
 		"requirements",
-		"protocol", /* openssl "method" */
 		"ciphers",
-		"allow_insecure_ssl_version_two",
 		NULL,
 	};
 
@@ -1312,7 +1310,6 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	PyObj requirements = NULL; /* iterable */
 
 	char *ciphers = FAULT_OPENSSL_CIPHERS;
-	char *protocol = "TLS";
 
 	if (!PyArg_ParseTupleAndKeywords(args, kw,
 		"|Os#OOss", kwlist,
@@ -1320,7 +1317,6 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		&(pwp.words), &(pwp.length),
 		&certificates,
 		&requirements,
-		&protocol,
 		&ciphers
 	))
 		return(NULL);
@@ -1349,21 +1345,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		// The key is checked and loaded later.
 	*/
 	ctx->tls_key_status = key_none;
-	ctx->tls_context = NULL;
-
-	#define X_TLS_METHOD(STRING, PREFIX) \
-		else if (strcmp(STRING, protocol) == 0) \
-			ctx->tls_context = SSL_CTX_new(PREFIX##_method());
-
-		if (0)
-			;
-		X_TLS_METHODS()
-		else
-		{
-			PyErr_SetString(PyExc_ValueError, "invalid 'protocol' argument");
-			goto error;
-		}
-	#undef X_TLS_METHOD
+	ctx->tls_context = SSL_CTX_new(TLS_method());
 
 	if (ctx->tls_context == NULL)
 	{
