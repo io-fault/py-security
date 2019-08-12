@@ -1,0 +1,57 @@
+! CONTEXT:
+	/protocol/
+		&<http://if.fault.io/project/templates>
+
+Each section represents a composite factor.
+These extension modules will be loaded directly from the filesystem and cached
+within &.kprotocol. No `sys.modules` entry will be present.
+
+[ kprotocol-client-openssl ]
+
+/factor.txt/#!text
+	! CONTEXT:
+		/protocol/
+			&<http://if.fault.io/project/factor>
+
+	/type/
+		`extension`
+	/symbols/
+		- `implementation`
+		- `fault:c-interfaces`
+		- `context:python-extension`
+		- `security-implementations`
+
+/src/module.c/#!/pl/c
+	#define ADAPTER_CLIENT 1
+	#define ADAPTER_TRANSPORT_NEW transport_new_client
+	#include <kprotocol-openssl.h>
+	#include <fault/python/module.h>
+	INIT(module, 0, PyDoc_STR("kprotocol adapter for clients using OpenSSL."))
+	{
+		return(init_implementation_data(module));
+	}
+
+[ kprotocol-server-openssl ]
+
+/factor.txt/#!text
+	! CONTEXT:
+		/protocol/
+			&<http://if.fault.io/project/factor>
+
+	/type/
+		`extension`
+	/symbols/
+		- `implementation`
+		- `fault:c-interfaces`
+		- `context:python-extension`
+		- `security-implementations`
+
+/src/module.c/#!/pl/c
+	#define ADAPTER_SERVER 1
+	#define ADAPTER_TRANSPORT_NEW transport_new_server
+	#include <kprotocol-openssl.h>
+	#include <fault/python/module.h>
+	INIT(module, 0, PyDoc_STR("kprotocol adapter for servers using OpenSSL."))
+	{
+		return(init_implementation_data(module));
+	}

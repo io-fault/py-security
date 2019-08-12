@@ -67,49 +67,6 @@ typedef enum {
 	call_set_hostname,
 } call_t;
 
-static const char *
-library_call_string(call_t call)
-{
-	const char *r;
-
-	switch (call)
-	{
-		case call_none:
-			r = "none";
-		break;
-
-		case call_set_hostname:
-			r = "SSL_set_tlsext_host_name";
-		break;
-
-		case call_handshake:
-			r = "SSL_do_handshake";
-		break;
-
-		case call_read:
-			r = "SSL_read";
-		break;
-
-		case call_write:
-			r = "SSL_write";
-		break;
-
-		case call_close:
-			r = "SSL_shutdown";
-		break;
-
-		case call_shutdown:
-			r = "SSL_shutdown";
-		break;
-
-		default:
-			r = "<unknown call identifier>";
-		break;
-	}
-
-	return(r);
-}
-
 /**
 	// Security Context [Cipher/Protocol Parameters]
 */
@@ -329,7 +286,7 @@ X_READ_OPENSSL_OBJECT(pki_key_t, load_pem_public_key, PEM_read_bio_PUBKEY)
 	// OpenSSL uses a per-thread error queue.
 */
 static PyObj
-pop_openssl_error(call_t call)
+pop_openssl_error(void)
 {
 	PyObj rob;
 	int line = -1, flags = 0;
@@ -367,11 +324,9 @@ pop_openssl_error(call_t call)
 			"reason", reason,
 			"data", ldata,
 			"path", path,
-			"line", line,
-			"call", library_call_string(call)
+			"line", line
 	);
 
-	ERR_clear_error();
 	return(rob);
 }
 
@@ -381,15 +336,24 @@ pop_openssl_error(call_t call)
 static void
 set_openssl_error(const char *exc_name, call_t call)
 {
-	PyObj err, exc = PyImport_ImportAdjacent("kprotocol", exc_name);
-	if (exc == NULL)
+	PyObj stack = NULL;
+
+	stack = PyList_New(0);
+	if (stack == NULL)
 		return;
 
-	if (ERR_peek_error() == 0)
-		return;
+	while (ERR_peek_error() != 0)
+	{
+		PyObj ie = pop_openssl_error();
+		if (ie == NULL)
+		{
+			Py_DECREF(stack);
+			return;
+		}
+		PyList_Append(stack, ie);
+	}
 
-	err = pop_openssl_error(call);
-	PyErr_SetObject(exc, err);
+	PyErr_SetObject(PyExc_RuntimeError, stack);
 }
 
 static PyObj
@@ -694,7 +658,7 @@ transport_library_error(Transport subject, call_t call)
 {
 	if (ERR_peek_error())
 	{
-		subject->tls_protocol_error = pop_openssl_error(call);
+		subject->tls_protocol_error = pop_openssl_error();
 		return(-1);
 	}
 

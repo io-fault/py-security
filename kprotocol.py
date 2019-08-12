@@ -3,10 +3,44 @@
 """
 
 import weakref
+import types
+import importlib.machinery
+
 from ..kernel import flows
+from ..system import identity
+from ..project import library as libproject
+
+def get_application_context(application='http'):
+	import os
+	from ..system import files
+
+	if 'SECURITY' in os.environ:
+		return files.Path.from_absolute(os.environ['SECURITY'])
+
+	return (files.Path.home() / '.pki' / application)
 
 class Error(Exception):
 	pass
+
+def _select(project, intention='debug', name='pki'):
+	sys, arch = identity.root_execution_context()
+	return libproject.integrals(project, ['extensions', name]).extend(
+		libproject.compose_integral_path({
+			'system': sys,
+			'architecture': arch,
+			'name': name,
+		})
+	).suffix('.' + intention + '.i')
+
+def load_context(route, type:str, name='pki'):
+	project = route / 'if' / ('kprotocol-' + type)
+	dllpath = _select(project, name=name)
+	loader = importlib.machinery.ExtensionFileLoader(name, str(dllpath))
+	return loader.load_module()
+
+def load(type:str, application='http', name='pki'):
+	route = get_application_context(application)
+	return load_context(route, type, name=name)
 
 class SecuredTransmit(flows.Protocol):
 	"""
