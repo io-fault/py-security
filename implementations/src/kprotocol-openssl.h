@@ -459,6 +459,7 @@ key_dealloc(PyObj self)
 {
 	Key k = (Key) self;
 	EVP_PKEY_free(k->lib_key);
+	Py_TYPE(self)->tp_free(self);
 }
 
 static PyObj
@@ -957,6 +958,7 @@ certificate_dealloc(PyObj self)
 {
 	Certificate cert = (Certificate) self;
 	X509_free(cert->lib_crt);
+	Py_TYPE(self)->tp_free(self);
 }
 
 static PyObj
@@ -1240,6 +1242,7 @@ context_dealloc(PyObj self)
 		SSL_CTX_free(ctx->tls_context);
 
 	context_clear(self);
+	Py_TYPE(self)->tp_free(self);
 }
 
 static PyObj
@@ -2214,6 +2217,7 @@ transport_dealloc(PyObj self)
 		SSL_free(tls->tls_state);
 
 	transport_clear(self);
+	Py_TYPE(self)->tp_free(self);
 }
 
 static PyObj
