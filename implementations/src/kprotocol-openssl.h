@@ -286,7 +286,7 @@ X_READ_OPENSSL_OBJECT(pki_key_t, load_pem_public_key, PEM_read_bio_PUBKEY)
 	// OpenSSL uses a per-thread error queue.
 */
 static PyObj
-pop_openssl_error(void)
+openssl_error_pop(void)
 {
 	PyObj rob;
 	int line = -1, flags = 0;
@@ -330,28 +330,35 @@ pop_openssl_error(void)
 	return(rob);
 }
 
-/**
-	// Used for objects other than Transports.
-*/
-static void
-set_openssl_error(const char *exc_name, call_t call)
+static PyObj
+openssl_error_collect(void)
 {
 	PyObj stack = NULL;
 
 	stack = PyList_New(0);
 	if (stack == NULL)
-		return;
+		return(NULL);
 
 	while (ERR_peek_error() != 0)
 	{
-		PyObj ie = pop_openssl_error();
+		PyObj ie = openssl_error_pop();
 		if (ie == NULL)
 		{
 			Py_DECREF(stack);
-			return;
+			return(NULL);
 		}
 		PyList_Append(stack, ie);
 	}
+
+	return(stack);
+}
+
+static void
+openssl_error_set(const char *exc_name, call_t call)
+{
+	PyObj stack = openssl_error_collect();
+	if (stack == NULL)
+		return;
 
 	PyErr_SetObject(PyExc_RuntimeError, stack);
 }
@@ -504,7 +511,7 @@ key_str(PyObj self)
 
 	error:
 	{
-		set_openssl_error("Error", 0);
+		openssl_error_set("Error", 0);
 
 		BIO_free(out);
 		return(NULL);
@@ -528,7 +535,7 @@ key_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	Py_RETURN_NONE;
 
 	lib_error:
-		set_openssl_error("Error", 0);
+		openssl_error_set("Error", 0);
 	error:
 		Py_XDECREF(k);
 		return(NULL);
@@ -609,7 +616,7 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 	tls->tls_state = SSL_new(ctx->tls_context);
 	if (tls->tls_state == NULL)
 	{
-		set_openssl_error("Error", 0);
+		openssl_error_set("Error", 0);
 		Py_DECREF(tls);
 		return(tls);
 	}
@@ -659,7 +666,7 @@ transport_library_error(Transport subject, call_t call)
 {
 	if (ERR_peek_error())
 	{
-		subject->tls_protocol_error = pop_openssl_error();
+		subject->tls_protocol_error = openssl_error_collect();
 		return(-1);
 	}
 
@@ -674,7 +681,7 @@ library_error(const char *errclass, call_t call)
 {
 	if (ERR_peek_error())
 	{
-		set_openssl_error(errclass, call);
+		openssl_error_set(errclass, call);
 		return(-1);
 	}
 	else
@@ -735,7 +742,7 @@ static int NAME(context_t ctx, PyObj certificates) \
 	return(1); \
 	\
 	ierror: \
-		set_openssl_error("Error", 0); \
+		openssl_error_set("Error", 0); \
 	error: \
 	{ \
 		Py_DECREF(pi); \
@@ -782,7 +789,7 @@ certificate_open(PyTypeObject *subtype, PyObj args, PyObj kw)
 	return((PyObj) cert);
 
 	lib_error:
-		set_openssl_error("Error", 0);
+		openssl_error_set("Error", 0);
 	error:
 	{
 		Py_DECREF(cert);
@@ -1038,7 +1045,7 @@ certificate_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	return((PyObj) cert);
 
 	lib_error:
-		set_openssl_error("Error", 0);
+		openssl_error_set("Error", 0);
 	error:
 	{
 		Py_XDECREF(cert);
@@ -1393,7 +1400,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 
 	ierror:
 	{
-		set_openssl_error("Error", 0);
+		openssl_error_set("Error", 0);
 	}
 
 	error:
