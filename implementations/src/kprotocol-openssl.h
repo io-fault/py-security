@@ -1,14 +1,5 @@
 /**
-	// SSL_CTX_set_client_cert_cb()
-	// SSL_ERROR_WANT_X509_LOOKUP (SSL_get_error return)
-
-	// The OpenSSL folks note a significant limitation of this feature as
-	// that the callback functions cannot return a full chain. However,
-	// if the chain is pre-configured on the Context, the full chain will be sent.
-	// The current implementation of OpenSSL means that a callback selecting
-	// the exact chain is... limited.
-
-	// X509_NAMES = SSL_get_client_CA_list(transport_t) - client connection get server (requirements) CA list.
+	// OpenSSL based TLS for fault.security.kprotocol.
 */
 #include <stdio.h>
 #include <unistd.h>
@@ -1238,6 +1229,7 @@ transport_flush(Transport tls)
 		{
 			switch (SSL_get_error(tls->tls_state, xfer))
 			{
+				case SSL_ERROR_WANT_X509_LOOKUP:
 				default:
 					r = 0;
 				break;
@@ -1896,6 +1888,60 @@ transport_get_violation(PyObj self, void *_)
 	return(Py_BuildValue("ss", violation(vr), X509_verify_cert_error_string(vr)));
 }
 
+static PyObj
+transport_get_client_ca_list(PyObj self, void *_)
+{
+	PyObj rob;
+	Transport tls = (Transport) self;
+	STACK_OF(X509_NAME) *calist;
+	int i;
+
+	rob = PyList_New(0);
+	calist = SSL_get_client_CA_list(tls->tls_state);
+
+	if (calist == NULL || rob == NULL)
+		return(rob);
+
+	for (i = 0; i < sk_X509_NAME_num(calist); ++i)
+	{
+		PyObj str;
+		const char *buf;
+		X509_NAME *n = sk_X509_NAME_value(calist, i);
+
+		buf = X509_NAME_oneline(n, 0, 0);
+		if (buf == NULL)
+		{
+			if (!library_error())
+				PyErr_SetString(PyExc_MemoryError, "could not allocate buffer for X509_NAME");
+
+			Py_DECREF(rob);
+			rob = NULL;
+			break;
+		}
+
+		str = PyUnicode_FromString(buf);
+		if (str == NULL)
+			goto error;
+
+		if (PyList_Append(rob, str))
+		{
+			Py_DECREF(str);
+			goto error;
+		}
+		else
+			Py_DECREF(str);
+
+		OPENSSL_free(buf);
+	}
+
+	return(rob);
+	error:
+	{
+		Py_DECREF(rob);
+		return(NULL);
+	}
+}
+
 static PyGetSetDef transport_getset[] = {
 	{"application", transport_get_application, NULL,
 		PyDoc_STR(
@@ -1951,6 +1997,11 @@ static PyGetSetDef transport_getset[] = {
 		PyDoc_STR(
 			"Tuple describing the violation; None if none."
 		),
+		NULL
+	},
+
+	{"client_ca_names", transport_get_client_ca_list, NULL,
+		PyDoc_STR("Sequence of names accepted by the server for client certificate verification."),
 		NULL
 	},
 
