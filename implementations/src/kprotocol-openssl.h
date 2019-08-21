@@ -32,6 +32,8 @@
 
 #include <openssl/objects.h>
 
+#define VERIFY_FAILURE 337047686
+
 #ifdef OPENSSL_NO_EVP
 	#error fault.security transport context requires openssl with EVP
 #endif
@@ -51,21 +53,6 @@
 */
 #define GetPointer(pb) (pb.buf)
 #define GetSize(pb) (pb.len)
-
-/**
-	// Call codes used to identify the library function that caused an error.
-*/
-typedef enum {
-	call_none = 0,
-	call_handshake,
-	call_read,
-	call_write,
-	call_close,   /* terminate */
-	call_connect, /* set connect */
-	call_accept,  /* set accept */
-	call_shutdown,
-	call_set_hostname,
-} call_t;
 
 /**
 	// Security Context [Cipher/Protocol Parameters]
@@ -89,14 +76,6 @@ typedef X509 *certificate_t;
 	// Public or Private Key
 */
 typedef EVP_PKEY *pki_key_t;
-
-typedef enum {
-	tls_protocol_error = -3,     /* effectively terminated */
-	tls_remote_termination = -2, /* shutdown from remote */
-	tls_local_termination = -1,  /* shutdown initiated locally */
-	tls_not_terminated = 0,
-	tls_terminating = 1,
-} termination_t;
 
 typedef enum {
 	key_none,
@@ -149,8 +128,6 @@ struct Transport {
 	Context ctx_object;
 
 	transport_t tls_state;
-
-	PyObj tls_protocol_error; /* dictionary or NULL (None) */
 
 	/**
 		// NULL until inspected then cached until the Transport is terminated.
@@ -282,6 +259,8 @@ X_READ_OPENSSL_OBJECT(pki_key_t, load_pem_private_key, PEM_read_bio_PrivateKey)
 X_READ_OPENSSL_OBJECT(pki_key_t, load_pem_public_key, PEM_read_bio_PUBKEY)
 #undef X_READ_OPENSSL_OBJECT
 
+PyObj PyExc_TransportSecurityError = NULL;
+
 /**
 	// OpenSSL uses a per-thread error queue.
 */
@@ -354,14 +333,45 @@ openssl_error_collect(void)
 }
 
 static void
-openssl_error_set(const char *exc_name, call_t call)
+openssl_error_set(void)
 {
-	PyObj stack = openssl_error_collect();
+	PyObj call = NULL;
+	PyObj stack = NULL;
+	PyObj val = NULL;
+
+	stack = openssl_error_collect();
 	if (stack == NULL)
 		return;
 
-	PyErr_SetObject(PyExc_RuntimeError, stack);
+	call = PyUnicode_FromString(call);
+	if (call == NULL)
+		goto error;
+
+	val = PyTuple_Pack(2, call, stack);
+	if (val == NULL)
+		goto error;
+
+	PyErr_SetObject(PyExc_TransportSecurityError, val);
+	error:
+	{
+		Py_XDECREF(stack);
+		Py_XDECREF(val);
+		Py_XDECREF(call);
+	}
 }
+
+static int
+library_error(void)
+{
+	if (ERR_peek_error())
+	{
+		openssl_error_set();
+		return(-1);
+	}
+	else
+		return(0);
+}
+
 
 static PyObj
 key_encrypt(PyObj self, PyObj data)
@@ -511,7 +521,7 @@ key_str(PyObj self)
 
 	error:
 	{
-		openssl_error_set("Error", 0);
+		library_error();
 
 		BIO_free(out);
 		return(NULL);
@@ -535,7 +545,7 @@ key_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	Py_RETURN_NONE;
 
 	lib_error:
-		openssl_error_set("Error", 0);
+		library_error();
 	error:
 		Py_XDECREF(k);
 		return(NULL);
@@ -616,7 +626,7 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 	tls->tls_state = SSL_new(ctx->tls_context);
 	if (tls->tls_state == NULL)
 	{
-		openssl_error_set("Error", 0);
+		library_error();
 		Py_DECREF(tls);
 		return(tls);
 	}
@@ -653,39 +663,6 @@ create_tls_state(PyTypeObject *typ, Context ctx)
 		Py_DECREF(tls);
 		return(NULL);
 	}
-}
-
-/**
-	// Assigned error data.
-	// Transports are used for asynchonous purposes and success
-	// with an exception is a possible state, so the error has to be
-	// assigned and then raised after the transfer has been performed.
-*/
-static int
-transport_library_error(Transport subject, call_t call)
-{
-	if (ERR_peek_error())
-	{
-		subject->tls_protocol_error = openssl_error_collect();
-		return(-1);
-	}
-
-	return(0);
-}
-
-/**
-	// Raised exception.
-*/
-static int
-library_error(const char *errclass, call_t call)
-{
-	if (ERR_peek_error())
-	{
-		openssl_error_set(errclass, call);
-		return(-1);
-	}
-	else
-		return(0);
 }
 
 /**
@@ -742,7 +719,7 @@ static int NAME(context_t ctx, PyObj certificates) \
 	return(1); \
 	\
 	ierror: \
-		openssl_error_set("Error", 0); \
+		library_error(); \
 	error: \
 	{ \
 		Py_DECREF(pi); \
@@ -789,7 +766,7 @@ certificate_open(PyTypeObject *subtype, PyObj args, PyObj kw)
 	return((PyObj) cert);
 
 	lib_error:
-		openssl_error_set("Error", 0);
+		library_error();
 	error:
 	{
 		Py_DECREF(cert);
@@ -1045,7 +1022,7 @@ certificate_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	return((PyObj) cert);
 
 	lib_error:
-		openssl_error_set("Error", 0);
+		library_error();
 	error:
 	{
 		Py_XDECREF(cert);
@@ -1111,7 +1088,7 @@ context_accept(PyObj self)
 
 	SSL_set_accept_state(tls->tls_state);
 
-	if (SSL_do_handshake(tls->tls_state) != 0 && library_error("Error", call_handshake))
+	if (SSL_do_handshake(tls->tls_state) != 0 && library_error())
 		goto error;
 
 	return((PyObj) tls);
@@ -1140,7 +1117,7 @@ _transport_set_hostname(Transport tls, PyObj hostname)
 	err = SSL_set_tlsext_host_name(tls->tls_state, (const char *) name);
 	if (err != 1)
 	{
-		library_error("Error", call_set_hostname);
+		library_error();
 		return(-1);
 	}
 
@@ -1163,7 +1140,7 @@ context_connect(PyObj self, PyObj hostname)
 
 	SSL_set_connect_state(tls->tls_state);
 
-	if (SSL_do_handshake(tls->tls_state) != 0 && library_error("Error", call_handshake))
+	if (SSL_do_handshake(tls->tls_state) != 0 && library_error())
 		goto error;
 
 	return((PyObj) tls);
@@ -1277,7 +1254,6 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	struct password_parameter pwp = {"", 0};
 
 	Context ctx;
-	call_t call;
 
 	PyObj key_ob = NULL;
 	PyObj certificates = NULL; /* iterable */
@@ -1405,7 +1381,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 
 	ierror:
 	{
-		openssl_error_set("Error", 0);
+		library_error();
 	}
 
 	error:
@@ -1508,7 +1484,7 @@ transport_flush(Transport tls)
 
 	if (xfer < 1)
 	{
-		if (transport_library_error(tls, call_write))
+		if (library_error())
 			r = -2;
 		else
 		{
@@ -1632,7 +1608,7 @@ transport_decipher(PyObj self, PyObj buffer_sequence)
 		bufptr = PyByteArray_AS_STRING(buffer);
 
 		xfer = SSL_read(tls->tls_state, bufptr, DEFAULT_READ_SIZE);
-		if (xfer < 1 && transport_library_error(tls, call_read))
+		if (xfer < 1 && library_error())
 		{
 			Py_DECREF(buffer);
 			break;
@@ -1838,9 +1814,15 @@ transport_close_output(PyObj self)
 {
 	Transport tls = (Transport) self;
 
+	if (SSL_in_init(tls->tls_state))
+	{
+		Py_INCREF(Py_False);
+		return(Py_False);
+	}
+
 	if (SSL_shutdown(tls->tls_state) < 0)
 	{
-		if (transport_library_error(tls, call_shutdown))
+		if (library_error())
 			Py_RETURN_NONE;
 	}
 
@@ -1935,13 +1917,6 @@ transport_methods[] = {
 
 static PyMemberDef
 transport_members[] = {
-	{"error", T_OBJECT,
-		offsetof(struct Transport, tls_protocol_error), READONLY,
-		PyDoc_STR(
-			"Protocol error data. &None if no *protocol* error occurred."
-		)
-	},
-
 	{"output_queue", T_OBJECT,
 		offsetof(struct Transport, output_queue), READONLY,
 		PyDoc_STR("Currently enqueued writes.")
@@ -2054,9 +2029,6 @@ transport_get_standard(PyObj self, void *_)
 	return(rob);
 }
 
-/**
-	// SSL_get_peer_cert_chain
-*/
 static PyObj
 transport_get_peer_certificate(PyObj self, void *_)
 {
@@ -2119,6 +2091,63 @@ transport_get_transmit_closed(PyObj self, void *_)
 	return(Py_False);
 }
 
+const char *
+violation(long vr)
+{
+	switch (vr)
+	{
+		case X509_V_ERR_CERT_NOT_YET_VALID:
+			return("not-yet-valid");
+		break;
+
+		case X509_V_ERR_CERT_HAS_EXPIRED:
+			return("expired");
+		break;
+
+		case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY:
+		case X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN:
+		case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT:
+		case X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT:
+		case X509_V_ERR_CERT_UNTRUSTED:
+			return("untrusted");
+		break;
+
+		case X509_V_ERR_CERT_REVOKED:
+			return("revoked");
+		break;
+
+		case X509_V_ERR_CERT_REJECTED:
+			return("rejected");
+		break;
+
+		case X509_V_ERR_CERT_SIGNATURE_FAILURE:
+			return("signature-mismatch");
+		break;
+
+		case X509_V_ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD:
+		case X509_V_ERR_ERROR_IN_CERT_NOT_AFTER_FIELD:
+		default:
+			return("invalid");
+		break;
+	}
+}
+
+static PyObj
+transport_get_violation(PyObj self, void *_)
+{
+	Transport tls = (Transport) self;
+	long vr;
+	const char *x;
+
+	vr = SSL_get_verify_result(tls->tls_state);
+	if (vr == X509_V_OK)
+	{
+		Py_RETURN_NONE;
+	}
+
+	return(Py_BuildValue("ss", violation(vr), X509_verify_cert_error_string(vr)));
+}
+
 static PyGetSetDef transport_getset[] = {
 	{"application", transport_get_application, NULL,
 		PyDoc_STR(
@@ -2170,6 +2199,13 @@ static PyGetSetDef transport_getset[] = {
 		NULL
 	},
 
+	{"violation", transport_get_violation, NULL,
+		PyDoc_STR(
+			"Tuple describing the violation; None if none."
+		),
+		NULL
+	},
+
 	{NULL,},
 };
 
@@ -2192,13 +2228,11 @@ transport_clear(PyObj self)
 	Transport tls = (Transport) self;
 
 	Py_XDECREF(tls->output_queue);
-	Py_XDECREF(tls->tls_protocol_error);
 	Py_XDECREF(tls->ctx_object);
 	Py_XDECREF(tls->recv_closed_cb);
 	Py_XDECREF(tls->send_queued_cb);
 
 	(tls->output_queue) = NULL;
-	(tls->tls_protocol_error) = NULL;
 	(tls->ctx_object) = NULL;
 	(tls->recv_closed_cb) = NULL;
 	(tls->send_queued_cb) = NULL;
@@ -2212,7 +2246,6 @@ transport_traverse(PyObj self, visitproc visit, void *arg)
 	Transport tls = (Transport) self;
 
 	Py_VISIT(tls->output_queue);
-	Py_VISIT(tls->tls_protocol_error);
 	Py_VISIT(tls->ctx_object);
 	Py_VISIT(tls->recv_closed_cb);
 	Py_VISIT(tls->send_queued_cb);
@@ -2243,7 +2276,7 @@ transport_new_server(PyTypeObject *typ, Context ctx)
 
 	SSL_set_accept_state(tls->tls_state);
 
-	if (SSL_do_handshake(tls->tls_state) != 0 && library_error("Error", call_handshake))
+	if (SSL_do_handshake(tls->tls_state) != 0 && library_error())
 		goto error;
 
 	return((PyObj) tls);
@@ -2272,7 +2305,7 @@ transport_new_client(PyTypeObject *typ, Context ctx, PyObj hostname)
 
 	SSL_set_connect_state(tls->tls_state);
 
-	if (SSL_do_handshake(tls->tls_state) != 0 && library_error("Error", call_handshake))
+	if (SSL_do_handshake(tls->tls_state) != 0 && library_error())
 		goto error;
 
 	return((PyObj) tls);
@@ -2396,6 +2429,18 @@ load_implementation(void)
 static int
 init_implementation_data(PyObj module)
 {
+	if (PyExc_TransportSecurityError == NULL)
+	{
+		PyExc_TransportSecurityError = PyErr_NewException("openssl.IError", NULL, NULL);
+		if (PyExc_TransportSecurityError == NULL)
+			goto error;
+	}
+	else
+		Py_INCREF(PyExc_TransportSecurityError);
+
+	if (PyModule_AddObject(module, "IError", PyExc_TransportSecurityError))
+		goto error;
+
 	if (PyModule_AddIntConstant(module, "version_code", OPENSSL_VERSION_NUMBER))
 		goto error;
 

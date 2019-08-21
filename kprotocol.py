@@ -19,8 +19,13 @@ def get_application_context(application='http'):
 
 	return (files.Path.home() / '.pki' / application)
 
-class Error(Exception):
-	pass
+class Violation(Exception):
+	def __init__(self, identifier, description):
+		self.identifier = identifier
+		self.description = description
+
+	def __str__(self):
+		return "%s: %s" %(self.identifier, self.description)
 
 def _select(project, intention='debug', name='pki'):
 	sys, arch = identity.root_execution_context()
@@ -75,8 +80,9 @@ class SecuredTransmit(flows.Protocol):
 			return
 
 		self.start_termination()
-		self.p_shared.close()
-		self.p_drain()
+
+		if self.p_shared.close():
+			self.p_drain()
 
 class SecuredReceive(flows.Protocol):
 	"""
