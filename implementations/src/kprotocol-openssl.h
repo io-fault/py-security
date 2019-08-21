@@ -1335,6 +1335,11 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		SSL_CTX_set_read_ahead(ctx->tls_context, 1);
 	}
 
+	SSL_CTX_load_verify_locations(ctx->tls_context,
+		CONTEXT_LOCATION "/net/ca-bundle.crt",
+		CONTEXT_LOCATION "/net/certificates");
+	SSL_CTX_set_verify(ctx->tls_context, ADAPTER_VERIFY, NULL);
+
 	#ifdef SSL_OP_NO_SSLv2
 		SSL_CTX_set_options(ctx->tls_context, SSL_OP_NO_SSLv2);
 	#endif

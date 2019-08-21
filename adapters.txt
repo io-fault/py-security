@@ -24,8 +24,11 @@ within &.kprotocol. No `sys.modules` entry will be present.
 /src/module.c/#!/pl/c
 	#define ADAPTER_CLIENT 1
 	#define ADAPTER_TRANSPORT_NEW transport_new_client
+	#define ADAPTER_VERIFY SSL_VERIFY_PEER
+	#include "context-data.h"
 	#include <kprotocol-openssl.h>
 	#include <fault/python/module.h>
+
 	INIT(module, 0, PyDoc_STR("kprotocol adapter for clients using OpenSSL."))
 	{
 		return(init_implementation_data(module));
@@ -49,8 +52,11 @@ within &.kprotocol. No `sys.modules` entry will be present.
 /src/module.c/#!/pl/c
 	#define ADAPTER_SERVER 1
 	#define ADAPTER_TRANSPORT_NEW transport_new_server
+	#define ADAPTER_VERIFY SSL_VERIFY_NONE
+	#include "context-data.h"
 	#include <kprotocol-openssl.h>
 	#include <fault/python/module.h>
+
 	INIT(module, 0, PyDoc_STR("kprotocol adapter for servers using OpenSSL."))
 	{
 		return(init_implementation_data(module));

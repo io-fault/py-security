@@ -61,6 +61,9 @@ def main(inv:process.Invocation) -> process.Exit:
 	factor = adapter / 'extensions' / 'pki'
 	ifst.instantiate(factor, source, adapter_name + '-' + adapter_imp)
 
+	ctx_data = factor / 'src' / 'context-data.h'
+	ctx_data.set_text_content("#define CONTEXT_LOCATION \"%s\"" % (str(route.container)))
+
 	symbols = ['implementation'] + symargs + construct_symbols
 	os.chdir(str(route))
 	ki = execution.KInvocation(str(cc), [str(cc), 'construct', adapter_name] + symbols)
