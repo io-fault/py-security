@@ -54,6 +54,8 @@
 #define GetPointer(pb) (pb.buf)
 #define GetSize(pb) (pb.len)
 
+typedef EVP_PKEY *pki_key_t;
+
 /**
 	// Security Context [Cipher/Protocol Parameters]
 */
@@ -72,27 +74,7 @@ typedef SSL *transport_t;
 typedef X509 *certificate_t;
 #define free_certificate_t X509_free
 
-/**
-	// Public or Private Key
-*/
-typedef EVP_PKEY *pki_key_t;
-
-typedef enum {
-	key_none,
-	key_required,
-	key_available
-} key_status_t;
-
 static PyObj version_info = NULL, version_str = NULL;
-
-/**
-	// Key object structure.
-*/
-struct Key {
-	PyObject_HEAD
-	pki_key_t lib_key;
-};
-typedef struct Key *Key;
 
 /**
 	// Certificate object structure.
@@ -109,7 +91,6 @@ typedef struct Certificate *Certificate;
 struct Context {
 	PyObject_HEAD
 	context_t tls_context;
-	key_status_t tls_key_status;
 	PyObj ctx_queue_type;
 };
 typedef struct Context *Context;
@@ -372,230 +353,6 @@ library_error(void)
 		return(0);
 }
 
-
-static PyObj
-key_encrypt(PyObj self, PyObj data)
-{
-	Py_RETURN_NONE;
-}
-
-static PyObj
-key_decrypt(PyObj self, PyObj data)
-{
-	Py_RETURN_NONE;
-}
-
-static PyObj
-key_sign(PyObj self, PyObj data)
-{
-	/* Private Key */
-	Py_RETURN_NONE;
-}
-
-static PyObj
-key_verify(PyObj self, PyObj data)
-{
-	/* Public Key */
-	Py_RETURN_NONE;
-}
-
-static PyMethodDef
-key_methods[] = {
-	{"encrypt", (PyCFunction) key_encrypt,
-		METH_O, PyDoc_STR(
-			"Encrypt the given binary data."
-		)
-	},
-
-	{"decrypt", (PyCFunction) key_decrypt,
-		METH_O, PyDoc_STR(
-			"Decrypt the given binary data."
-		)
-	},
-
-	{"sign", (PyCFunction) key_sign,
-		METH_O, PyDoc_STR(
-			"Sign the given binary data."
-		)
-	},
-
-	{"verify", (PyCFunction) key_verify,
-		METH_VARARGS, PyDoc_STR(
-			"Verify the signature of the binary data."
-		)
-	},
-
-	{NULL,},
-};
-
-static const char *
-key_type_string(Key k)
-{
-	switch (EVP_PKEY_base_id(k->lib_key))
-	{
-		case EVP_PKEY_RSA:
-			return "rsa";
-		break;
-
-		case EVP_PKEY_DSA:
-			return "dsa";
-		break;
-
-		case EVP_PKEY_DH:
-			return "dh";
-		break;
-
-		case EVP_PKEY_EC:
-			return "ec";
-		break;
-	}
-
-	return "unknown";
-}
-
-static PyObj
-key_get_type(PyObj self, void *p)
-{
-	Key k = (Key) self;
-
-	return(PyUnicode_FromString(key_type_string(k)));
-}
-
-static PyGetSetDef
-key_getset[] = {
-	{"type",
-		key_get_type, NULL,
-		PyDoc_STR("certificate type; always X509."),
-	},
-
-	{NULL,},
-};
-
-static void
-key_dealloc(PyObj self)
-{
-	Key k = (Key) self;
-	EVP_PKEY_free(k->lib_key);
-	Py_TYPE(self)->tp_free(self);
-}
-
-static PyObj
-key_repr(PyObj self)
-{
-	PyObj rob;
-	Key k = (Key) self;
-
-	rob = PyUnicode_FromFormat("<%s[%s] %p>", Py_TYPE(self)->tp_name, key_type_string(k), k);
-	return(rob);
-}
-
-static PyObj
-key_str(PyObj self)
-{
-	Key k = (Key) self;
-	PyObj rob = NULL;
-	BIO *out;
-	char *ptr = NULL;
-	Py_ssize_t size = 0;
-
-	out = BIO_new(BIO_s_mem());
-	if (out == NULL)
-	{
-		PyErr_SetString(PyExc_MemoryError, "could not allocate memory BIO for Key");
-		return(NULL);
-	}
-
-	if (EVP_PKEY_print_public(out, k->lib_key, 0, NULL) <= 0)
-		goto error;
-	if (EVP_PKEY_print_private(out, k->lib_key, 0, NULL) <= 0)
-		goto error;
-	if (EVP_PKEY_print_params(out, k->lib_key, 0, NULL) <= 0)
-		goto error;
-
-	size = (Py_ssize_t) BIO_get_mem_data(out, &ptr);
-	rob = Py_BuildValue("s#", ptr, size);
-
-	BIO_free(out);
-
-	return(rob);
-
-	error:
-	{
-		library_error();
-
-		BIO_free(out);
-		return(NULL);
-	}
-}
-
-static PyObj
-key_new(PyTypeObject *subtype, PyObj args, PyObj kw)
-{
-	static char *kwlist[] = {"pem", NULL,};
-	PyObj pem;
-	Key k;
-
-	if (!PyArg_ParseTupleAndKeywords(args, kw, "O", kwlist, &pem))
-		return(NULL);
-
-	k = (Key) subtype->tp_alloc(subtype, 0);
-	if (k == NULL)
-		return(NULL);
-
-	Py_RETURN_NONE;
-
-	lib_error:
-		library_error();
-	error:
-		Py_XDECREF(k);
-		return(NULL);
-}
-
-PyDoc_STRVAR(key_doc, "OpenSSL EVP_PKEY objects.");
-
-static PyTypeObject
-KeyType = {
-	PyVarObject_HEAD_INIT(NULL, 0)
-	PYTHON_MODULE_PATH("Key"),      /* tp_name */
-	sizeof(struct Key),             /* tp_basicsize */
-	0,                              /* tp_itemsize */
-	key_dealloc,                    /* tp_dealloc */
-	NULL,                           /* tp_print */
-	NULL,                           /* tp_getattr */
-	NULL,                           /* tp_setattr */
-	NULL,                           /* tp_compare */
-	key_repr,                       /* tp_repr */
-	NULL,                           /* tp_as_number */
-	NULL,                           /* tp_as_sequence */
-	NULL,                           /* tp_as_mapping */
-	NULL,                           /* tp_hash */
-	NULL,                           /* tp_call */
-	key_str,                        /* tp_str */
-	NULL,                           /* tp_getattro */
-	NULL,                           /* tp_setattro */
-	NULL,                           /* tp_as_buffer */
-	Py_TPFLAGS_BASETYPE|
-	Py_TPFLAGS_DEFAULT,             /* tp_flags */
-	key_doc,                        /* tp_doc */
-	NULL,                           /* tp_traverse */
-	NULL,                           /* tp_clear */
-	NULL,                           /* tp_richcompare */
-	0,                              /* tp_weaklistoffset */
-	NULL,                           /* tp_iter */
-	NULL,                           /* tp_iternext */
-	key_methods,                    /* tp_methods */
-	NULL,                           /* tp_members */
-	key_getset,                     /* tp_getset */
-	NULL,                           /* tp_base */
-	NULL,                           /* tp_dict */
-	NULL,                           /* tp_descr_get */
-	NULL,                           /* tp_descr_set */
-	0,                              /* tp_dictoffset */
-	NULL,                           /* tp_init */
-	NULL,                           /* tp_alloc */
-	key_new,                        /* tp_new */
-};
-
 /**
 	// primary &transport_new parts. Normally called by the Context methods.
 */
@@ -791,12 +548,6 @@ certificate_members[] = {
 };
 
 static PyObj
-key_from_lib_key(EVP_PKEY *k)
-{
-	Py_RETURN_NONE;
-}
-
-static PyObj
 str_from_asn1_string(ASN1_STRING *str)
 {
 	PyObj rob;
@@ -896,8 +647,6 @@ long_from_asn1_integer(ASN1_INTEGER *i)
 		"The 'notAfter' field as a string.", X509_get_notAfter, str_from_asn1_time) \
 	CERT_PROPERTY(signature_type, \
 		"The type of signature used to sign the key.", X509_get_signature_type, str_from_nid) \
-	CERT_PROPERTY(key, \
-		"The public key provided by the certificate.", X509_get_pubkey, key_from_lib_key) \
 	CERT_PROPERTY(subject, \
 		"The subject data of the cerficate.", X509_get_subject_name, seq_from_names) \
 	CERT_PROPERTY(issuer, \
@@ -1294,7 +1043,6 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	/*
 		// The key is checked and loaded later.
 	*/
-	ctx->tls_key_status = key_none;
 	ctx->tls_context = SSL_CTX_new(TLS_method());
 
 	if (ctx->tls_context == NULL)
@@ -1370,7 +1118,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 
 		if (SSL_CTX_use_PrivateKey(ctx->tls_context, key)
 				&& SSL_CTX_check_private_key(ctx->tls_context))
-			ctx->tls_key_status = key_available;
+			;
 		else
 		{
 			goto ierror;
