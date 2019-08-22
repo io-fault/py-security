@@ -20,6 +20,20 @@ def get_application_context(application='http'):
 	return (files.Path.home() / '.pki' / application)
 
 class Violation(Exception):
+	"""
+	# Security Context restriction violation.
+
+	# Usually caused by implementation errors, violations are
+	# abstractions used to provide a symbolic identifier for
+	# the restriction that was violated.
+
+	# [ Properties ]
+	# /identifier/
+		# The symbolic identifier used to describe the error.
+	# /description/
+		# An implementation specific description of the error.
+	"""
+
 	def __init__(self, identifier, description):
 		self.identifier = identifier
 		self.description = description
