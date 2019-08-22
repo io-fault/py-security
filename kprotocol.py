@@ -78,6 +78,8 @@ class SecuredTransmit(flows.Protocol):
 		self._stx_receive_closed = True
 
 		if self.terminating:
+			if self.p_shared.close():
+				self.p_drain()
 			self._f_terminated()
 
 	def stx_receive_interrupt(self):
@@ -88,6 +90,8 @@ class SecuredTransmit(flows.Protocol):
 
 		if self.terminating:
 			self._f_terminated()
+		else:
+			self.fault(Exception("receive interrupted while transmit was active"))
 
 	def f_terminate(self):
 		if not self.functioning:
@@ -104,6 +108,10 @@ class SecuredReceive(flows.Protocol):
 	# Holds a strong reference to the corresponding &SecuredTransmit instance
 	# using &srx_transmit_channel.
 	"""
+
+	def interrupt(self):
+		super().interrupt()
+		self.srx_transmit_channel.stx_receive_interrupt()
 
 	def p_terminated(self):
 		self.start_termination()
