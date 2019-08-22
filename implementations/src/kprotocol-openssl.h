@@ -2198,7 +2198,6 @@ TransportType = {
 };
 
 #define PYTHON_TYPES() \
-	ID(Key) \
 	ID(Certificate) \
 	ID(Context) \
 	ID(Transport)
