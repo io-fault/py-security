@@ -65,6 +65,8 @@ typedef SSL *transport_t;
 typedef X509 *certificate_t;
 #define free_certificate_t X509_free
 
+#include "openssl-errors.h"
+
 static PyObj version_info = NULL, version_str = NULL;
 
 /**
@@ -233,111 +235,13 @@ X_READ_OPENSSL_OBJECT(pki_key_t, load_pem_public_key, PEM_read_bio_PUBKEY)
 
 PyObj PyExc_TransportSecurityError = NULL;
 
-/**
-	// OpenSSL uses a per-thread error queue.
-*/
-static PyObj
-openssl_error_pop(void)
-{
-	PyObj rob;
-	int line = -1, flags = 0;
-	const char *lib, *func, *reason, *path, *data = NULL, *ldata;
-	unsigned long error_code;
-
-	error_code = ERR_get_error_line_data(&path, &line, &data, &flags);
-
-	lib = ERR_lib_error_string(error_code);
-	func = ERR_func_error_string(error_code);
-	reason = ERR_reason_error_string(error_code);
-
-	if (lib && lib[0] == '\0')
-		lib = NULL;
-
-	if (func && func[0] == '\0')
-		func = NULL;
-
-	if (reason && reason[0] == '\0')
-		reason = NULL;
-
-	if (data && data[0] == '\0')
-		ldata = NULL;
-	else
-		ldata = data;
-
-	if (path && path[0] == '\0')
-		path = NULL;
-
-	rob = Py_BuildValue(
-		"((sk)(ss)(ss)(ss)(ss)(ss)(si))",
-			"code", error_code,
-			"library", lib,
-			"function", func,
-			"reason", reason,
-			"data", ldata,
-			"path", path,
-			"line", line
-	);
-
-	return(rob);
-}
-
-static PyObj
-openssl_error_collect(void)
-{
-	PyObj stack = NULL;
-
-	stack = PyList_New(0);
-	if (stack == NULL)
-		return(NULL);
-
-	while (ERR_peek_error() != 0)
-	{
-		PyObj ie = openssl_error_pop();
-		if (ie == NULL)
-		{
-			Py_DECREF(stack);
-			return(NULL);
-		}
-		PyList_Append(stack, ie);
-	}
-
-	return(stack);
-}
-
-static void
-openssl_error_set(void)
-{
-	PyObj call = NULL;
-	PyObj stack = NULL;
-	PyObj val = NULL;
-
-	stack = openssl_error_collect();
-	if (stack == NULL)
-		return;
-
-	call = PyUnicode_FromString(call);
-	if (call == NULL)
-		goto error;
-
-	val = PyTuple_Pack(2, call, stack);
-	if (val == NULL)
-		goto error;
-
-	PyErr_SetObject(PyExc_TransportSecurityError, val);
-	error:
-	{
-		Py_XDECREF(stack);
-		Py_XDECREF(val);
-		Py_XDECREF(call);
-	}
-}
-
 static int
 library_error(void)
 {
-	if (ERR_peek_error())
+	if (ERR_peek_error() != 0)
 	{
 		openssl_error_set();
+		ERR_clear_error();
 		return(-1);
 	}
 	else
@@ -1351,7 +1255,8 @@ transport_decipher(PyObj self, PyObj buffer_sequence)
 		if (xfer < 1 && library_error())
 		{
 			Py_DECREF(buffer);
-			break;
+			Py_DECREF(rob);
+			return(NULL);
 		}
 		else if (xfer > 0)
 		{
@@ -1931,7 +1836,7 @@ transport_get_client_ca_list(PyObj self, void *_)
 		else
 			Py_DECREF(str);
 
-		OPENSSL_free(buf);
+		OPENSSL_free((void *) buf);
 	}
 
 	return(rob);
@@ -2198,6 +2103,7 @@ TransportType = {
 };
 
 #define PYTHON_TYPES() \
+	ID(EData) \
 	ID(Certificate) \
 	ID(Context) \
 	ID(Transport)
@@ -2217,9 +2123,8 @@ load_implementation(void)
 		OPENSSL_init_ssl(0, NULL);
 	#endif
 
-	SSL_load_error_strings();
 	ERR_load_BIO_strings();
-	ERR_load_crypto_strings();
+	SSL_load_error_strings();
 	OpenSSL_add_ssl_algorithms();
 	ERR_clear_error();
 }

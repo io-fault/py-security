@@ -181,8 +181,7 @@ edata_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	}
 }
 
-PyDoc_STRVAR(edata_doc, "Error stack storage.");
-
+PyDoc_STRVAR(edata_doc, "Error data storage for IError exceptions.");
 
 PyTypeObject
 EDataType = {
