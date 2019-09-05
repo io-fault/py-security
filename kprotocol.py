@@ -1,11 +1,11 @@
 """
 # &..kernel protocol adapters for transport security contexts.
 """
-
 import weakref
 import types
 import importlib.machinery
 
+from ..context import weak
 from ..kernel import flows
 from ..system import identity
 from ..project import library as libproject
@@ -122,7 +122,7 @@ class SecuredReceive(flows.Protocol):
 			self.srx_transmit_channel.stx_receive_interrupt()
 		self._f_terminated()
 
-def allocate(tls, Method=weakref.WeakMethod, Reference=weakref.ref):
+def allocate(tls, Method=weak.Method, Reference=weakref.ref):
 	"""
 	# Construct a protocol stack pair using the given &tls instance.
 	"""
@@ -133,10 +133,10 @@ def allocate(tls, Method=weakref.WeakMethod, Reference=weakref.ref):
 	srx.srx_transmit_channel = stx
 	stx.stx_receive_channel = Reference(srx)
 
-	drain = Method(stx.p_drain)
-	tls.connect_transmit_ready((lambda: drain()()))
+	drain = Method(stx.p_drain).zero
+	tls.connect_transmit_ready(drain)
 
-	ptermd = Method(srx.p_terminated)
-	tls.connect_receive_closed((lambda: ptermd()()))
+	ptermd = Method(srx.p_terminated).zero
+	tls.connect_receive_closed(ptermd)
 
 	return (srx, stx)
