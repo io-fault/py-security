@@ -18,7 +18,6 @@ within &.kprotocol. No `sys.modules` entry will be present.
 	/symbols/
 		- `implementation`
 		- `fault:c-interfaces`
-		- `context:python-extension`
 		- `security-implementations`
 
 /src/module.c/#!/pl/c
@@ -46,7 +45,6 @@ within &.kprotocol. No `sys.modules` entry will be present.
 	/symbols/
 		- `implementation`
 		- `fault:c-interfaces`
-		- `context:python-extension`
 		- `security-implementations`
 
 /src/module.c/#!/pl/c

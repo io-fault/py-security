@@ -66,6 +66,7 @@ def main(inv:process.Invocation) -> process.Exit:
 
 	symbols = ['implementation'] + symargs + construct_symbols
 	os.chdir(str(route))
+	os.environ['PWD'] = str(route)
 	ki = execution.KInvocation(str(cc), [str(cc), 'construct', adapter_name] + symbols)
 	pid = ki.spawn({1:1, 2:2}.items())
 	os.wait()
