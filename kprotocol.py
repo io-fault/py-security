@@ -9,6 +9,7 @@ from ..context import weak
 from ..kernel import flows
 from ..system import identity
 from ..project import library as libproject
+from .. import routes
 
 def get_application_context(application='http'):
 	import os
@@ -43,13 +44,15 @@ class Violation(Exception):
 
 def _select(project, intention='debug', name='pki'):
 	sys, arch = identity.root_execution_context()
-	return libproject.integrals(project, ['extensions', name]).extend(
+	extname = routes.Segment.from_sequence(['extensions', name])
+
+	return (libproject.integrals(project, extname) + (
 		libproject.compose_integral_path({
 			'system': sys,
 			'architecture': arch,
 			'name': name,
 		})
-	).suffix('.' + intention + '.i')
+	)).suffix('.' + intention + '.i')
 
 def load_context(route, type:str, name='pki'):
 	project = route / 'if' / ('kprotocol-' + type)

@@ -9,6 +9,7 @@ from ...system import execution
 
 from ...text.bin import ifst
 from ...project import library as libproject
+from ... import routes
 
 from .. import __file__ as pkgprefix
 pkgprefix = files.Path.from_path(pkgprefix).container
@@ -37,12 +38,12 @@ def init_project(route):
 	(route/'extensions').init('directory')
 
 intention = 'debug'
-i_headers = libproject.integrals(pkgprefix, ['implementations']).extend(
-	libproject.compose_integral_path({
-		'architecture': 'sources',
-		'name': 'implementations',
-	})
-).suffix('.' + intention + '.i')
+i_headers = libproject.integrals(pkgprefix, routes.Segment.from_sequence(['implementations']))
+i_headers += libproject.compose_integral_path({
+	'architecture': 'sources',
+	'name': 'implementations',
+})
+i_headers = i_headers.suffix('.' + intention + '.i')
 
 construct_symbols = [
 	'security-implementations', '-I'+str(i_headers)
