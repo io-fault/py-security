@@ -26,7 +26,7 @@ project_info = {
 }
 
 def init_project(route):
-	route.init('directory')
+	route.fs_mkdir()
 	f = route / 'project.txt'
 	f.set_text_content(
 		"! CONTEXT:\n"
@@ -35,7 +35,7 @@ def init_project(route):
 			"/%s/\n\t%s" % i for i in project_info.items()
 		]) + "\n"
 	)
-	(route/'extensions').init('directory')
+	(route/'extensions').fs_mkdir()
 
 intention = 'debug'
 i_headers = libproject.integrals(pkgprefix, routes.Segment.from_sequence(['implementations']))
@@ -43,7 +43,7 @@ i_headers += libproject.compose_integral_path({
 	'architecture': 'sources',
 	'name': 'implementations',
 })
-i_headers = i_headers.suffix('.' + intention + '.i')
+i_headers = i_headers.suffix_filename('.' + intention + '.i')
 
 construct_symbols = [
 	'security-implementations', '-I'+str(i_headers)

@@ -5,9 +5,9 @@ from ...system import process
 from ...system import files
 
 def init(route):
-	route.init('directory')
+	route.fs_mkdir()
 	adapters = (route/'if')
-	adapters.init('directory')
+	adapters.fs_mkdir()
 
 def main(inv:process.Invocation) -> process.Exit:
 	path, = inv.args # target path to initialize

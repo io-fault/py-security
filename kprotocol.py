@@ -52,7 +52,7 @@ def _select(project, intention='debug', name='pki'):
 			'architecture': arch,
 			'name': name,
 		})
-	)).suffix('.' + intention + '.i')
+	)).suffix_filename('.' + intention + '.i')
 
 def load_context(route, type:str, name='pki'):
 	project = route / 'if' / ('kprotocol-' + type)

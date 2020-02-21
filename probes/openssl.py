@@ -17,5 +17,5 @@ def locate_openssl_object_header(executable):
 	return headers, prefix / 'lib', objh
 
 def pipe(object_header):
-	with object_header.open('rb') as f:
+	with object_header.fs_open('rb') as f:
 		pipe = libexec.PInvocation.from_commands(*_extract_nids)
