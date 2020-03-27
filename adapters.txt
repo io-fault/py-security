@@ -17,8 +17,7 @@ within &.kprotocol. No `sys.modules` entry will be present.
 		`extension`
 	/symbols/
 		- `implementation`
-		- `fault:c-interfaces`
-		- `security-implementations`
+		- `project-c-interfaces`
 
 /src/module.c/#!/pl/c
 	#define ADAPTER_CLIENT 1
@@ -44,8 +43,7 @@ within &.kprotocol. No `sys.modules` entry will be present.
 		`extension`
 	/symbols/
 		- `implementation`
-		- `fault:c-interfaces`
-		- `security-implementations`
+		- `project-c-interfaces`
 
 /src/module.c/#!/pl/c
 	#define ADAPTER_SERVER 1

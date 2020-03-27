@@ -55,7 +55,7 @@ def _select(project, intention='debug', name='pki'):
 	)).suffix_filename('.' + intention + '.i')
 
 def load_context(route, type:str, name='pki'):
-	project = route / 'if' / ('kprotocol-' + type)
+	project = route / 'if' / 'kprotocol' / type
 	dllpath = _select(project, name=name)
 	loader = importlib.machinery.ExtensionFileLoader(name, str(dllpath))
 	return loader.load_module()

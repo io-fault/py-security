@@ -8,66 +8,79 @@ from ...system import process
 from ...system import execution
 
 from ...text.bin import ifst
-from ...project import library as libproject
+from ...project import root
 from ... import routes
 
 from .. import __file__ as pkgprefix
 pkgprefix = files.Path.from_path(pkgprefix).container
 
 project_info = {
-	'identifier': "`http://fault.io/python/security/adapter`",
-	'name': "`tls-adapter`",
 	'controller': "fault.io",
-	'versioning': "none",
 	'status': "volatile",
 	'abstract': "Transport Security Adapter",
 	'icon': "- (emoji)`🔒`",
 	'contact': "`http://fault.io/critical`"
 }
 
-def init_project(route):
+project_infra = """! CONTEXT:
+	/protocol/
+		&<http://if.fault.io/project/infrastructure>
+
+/project-c-interfaces/
+	- &<http://fault.io/engineering/posix#include>
+	- &<http://fault.io/engineering/python#include>
+	- &<http://fault.io/python/security#implementations>
+"""
+
+def init_product(route, roots):
+	pdr = (route/'.product').fs_mkdir()
+	(pdr/'ROOTS').set_text_content(' '.join(roots))
+	pd = root.Product(route)
+	pd.roots = [root.types.factor@x for x in roots]
+	return pd
+
+def init_project(product, orientation):
+	route = product/orientation
 	route.fs_mkdir()
+
+	pi = dict(project_info)
+	pi['identifier'] = 'http://fault.io/python/security/kprotocol-' + orientation
+	pi['name'] = 'kprotocol-' + orientation
+
+	(route/'.protocol').set_text_content(pi['identifier'] + ' factors/polynomial-1')
 	f = route / 'project.txt'
 	f.set_text_content(
 		"! CONTEXT:\n"
 		"\t/protocol/\n"
 		"\t\t&<http://if.fault.io/project/information>\n\n" + "\n".join([
-			"/%s/\n\t%s" % i for i in project_info.items()
+			"/%s/\n\t%s" % i for i in pi.items()
 		]) + "\n"
 	)
 	(route/'extensions').fs_mkdir()
 
-intention = 'debug'
-i_headers = libproject.integrals(pkgprefix, routes.Segment.from_sequence(['implementations']))
-i_headers += libproject.compose_integral_path({
-	'architecture': 'sources',
-	'name': 'implementations',
-})
-i_headers = i_headers.suffix_filename('.' + intention + '.i')
-
-construct_symbols = [
-	'security-implementations', '-I'+str(i_headers)
-]
+	i = route / 'infrastructure.txt'
+	i.set_text_content(project_infra)
 
 def main(inv:process.Invocation) -> process.Exit:
-	target, adapter_arg, cctx, *symargs = inv.args # path, *identifiers
-	adapter_name, adapter_imp = adapter_arg.split('/')
+	source = pkgprefix / 'adapters.txt'
+	target, adapter, implementation, orientation, cctx, *symargs = inv.args
 
 	cc = files.Path.from_path(cctx) / 'execute'
 	route = files.Path.from_path(target) / 'if'
-	source = pkgprefix / 'adapters.txt'
 
-	adapter = route / adapter_name
-	init_project(adapter)
-	factor = adapter / 'extensions' / 'pki'
-	ifst.instantiate(factor, source, adapter_name + '-' + adapter_imp)
+	pd = init_product(route/adapter, [orientation])
+
+	init_project(route/adapter, orientation)
+	factor = route / adapter / orientation / 'extensions' / 'pki'
+	ifst.instantiate(factor, source, '-'.join([adapter, orientation, implementation]))
+	pd.update()
+	pd.store()
 
 	ctx_data = factor / 'src' / 'context-data.h'
 	ctx_data.set_text_content("#define CONTEXT_LOCATION \"%s\"" % (str(route.container)))
 
-	symbols = ['implementation'] + symargs + construct_symbols
-	os.chdir(str(route))
-	os.environ['PWD'] = str(route)
-	ki = execution.KInvocation(str(cc), [str(cc), 'construct', adapter_name] + symbols)
-	pid = ki.spawn({1:1, 2:2}.items())
-	os.wait()
+	symbols = ['implementation'] + symargs
+	ki = (str(cc), [str(cc), 'construct', str(route/adapter), orientation] + symbols)
+	pid = execution.KInvocation(*ki).spawn({1:1, 2:2}.items())
+
+	return inv.exit(os.WEXITSTATUS(os.wait()[1]))
