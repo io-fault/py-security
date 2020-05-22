@@ -15,11 +15,10 @@ from .. import __file__ as pkgprefix
 pkgprefix = files.Path.from_path(pkgprefix).container
 
 project_info = {
-	'controller': "fault.io",
-	'status': "volatile",
+	'authority': "`fault.io`",
 	'abstract': "Transport Security Adapter",
 	'icon': "- (emoji)`🔒`",
-	'contact': "`http://fault.io/critical`"
+	'contact': "&<http://fault.io/critical>"
 }
 
 project_infra = """! CONTEXT:
