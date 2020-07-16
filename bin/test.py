@@ -1,5 +1,3 @@
-from .. import openssl as module
-
 key = b"""
 -----BEGIN RSA PRIVATE KEY-----
 MIIEogIBAAKCAQEAtIW++6LjK5ou4Ej6QLeZInaR0iN7/g5gE5o41Z2QaDA+Xxk9
