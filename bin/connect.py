@@ -26,9 +26,9 @@ project_infra = """! CONTEXT:
 		&<http://if.fault.io/project/infrastructure>
 
 /project-c-interfaces/
-	- &<http://fault.io/engineering/posix#include>
-	- &<http://fault.io/engineering/python#include>
-	- &<http://fault.io/python/security#implementations>
+	- &<http://fault.io/engineering/posix/include>
+	- &<http://fault.io/engineering/python/include>
+	- &<http://fault.io/python/security/implementations>
 """
 
 def init_product(route, roots):
