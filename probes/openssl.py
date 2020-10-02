@@ -1,7 +1,7 @@
 """
 # Extract library directories and include directories for using an OpenSSL installation.
 """
-from ...system import files
+from ...system import query
 from ...system import execution as libexec
 
 _extract_nids = (
@@ -10,7 +10,7 @@ _extract_nids = (
 )
 
 def locate_openssl_object_header(executable):
-	bin = files.Path.which(executable)
+	bin = next(query.executables(executable))
 	prefix = bin.container.container
 	headers = prefix / 'include'
 	objh = headers / 'openssl' / 'objects.h'
