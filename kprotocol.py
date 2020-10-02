@@ -13,12 +13,13 @@ from .. import routes
 
 def get_application_context(application='http'):
 	import os
+	from ..system import query
 	from ..system import files
 
 	if 'SECURITY' in os.environ:
 		return files.Path.from_absolute(os.environ['SECURITY'])
 
-	return (files.Path.home() / '.pki' / application)
+	return (query.home() / '.pki' / application)
 
 class Violation(Exception):
 	"""
