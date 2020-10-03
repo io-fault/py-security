@@ -8,7 +8,7 @@ import importlib.machinery
 from ..context import weak
 from ..kernel import flows
 from ..system import identity
-from ..project import library as libproject
+from ..project import root
 from .. import routes
 
 def get_application_context(application='http'):
@@ -43,21 +43,21 @@ class Violation(Exception):
 	def __str__(self):
 		return "%s: %s" %(self.identifier, self.description)
 
-def _select(project, intention='debug', name='pki'):
+def load_context(route, type:str, name='pki', intention='debug'):
 	sys, arch = identity.root_execution_context()
-	extname = routes.Segment.from_sequence(['extensions', name])
+	product = route@'if/kprotocol'
 
-	return (libproject.integrals(project, extname) + (
-		libproject.compose_integral_path({
-			'system': sys,
-			'architecture': arch,
-			'name': name,
-		})
-	)).suffix_filename('.' + intention + '.i')
+	ctx = root.Context()
+	ctx.connect(product)
+	ctx.load()
+	for pj in ctx.iterprojects():
+		if pj.factor.identifier == type:
+			break
+	else:
+		raise Exception("security context did not have a kprotocol %s project" %(type,))
 
-def load_context(route, type:str, name='pki'):
-	project = route / 'if' / 'kprotocol' / type
-	dllpath = _select(project, name=name)
+	var = {'system': sys, 'architecture': arch, 'intention': intention}
+	dllpath = pj.image(var, root.types.factor@"extensions"/name)
 	loader = importlib.machinery.ExtensionFileLoader(name, str(dllpath))
 	return loader.load_module()
 
