@@ -9,7 +9,6 @@ from ...system import execution
 
 from ...text.bin import ifst
 from ...project import root
-from ... import routes
 
 from .. import __file__ as pkgprefix
 pkgprefix = files.Path.from_path(pkgprefix).container

@@ -9,7 +9,6 @@ from ..context import weak
 from ..kernel import flows
 from ..system import identity
 from ..project import root
-from .. import routes
 
 def get_application_context(application='http'):
 	import os
