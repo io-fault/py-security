@@ -42,7 +42,7 @@ class Violation(Exception):
 	def __str__(self):
 		return "%s: %s" %(self.identifier, self.description)
 
-def load_context(route, type:str, name='pki', intention='debug'):
+def load_context(route, type:str, name='pki', intention='optimal'):
 	sys, arch = identity.root_execution_context()
 	product = route@'if/kprotocol'
 
