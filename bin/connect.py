@@ -61,9 +61,8 @@ def init_project(product, orientation):
 
 def main(inv:process.Invocation) -> process.Exit:
 	source = pkgprefix / 'adapters.txt'
-	target, adapter, implementation, orientation, cctx, *symargs = inv.args
+	target, adapter, implementation, orientation, pdctl, *symargs = inv.args
 
-	cc = files.Path.from_path(cctx) / 'execute'
 	route = files.Path.from_path(target) / 'if'
 
 	pd = init_product(route/adapter, [orientation])
@@ -78,7 +77,7 @@ def main(inv:process.Invocation) -> process.Exit:
 	ctx_data.set_text_content("#define CONTEXT_LOCATION \"%s\"" % (str(route.container)))
 
 	symbols = ['implementation'] + symargs
-	ki = (str(cc), [str(cc), 'construct', str(route/adapter), orientation] + symbols)
-	pid = execution.KInvocation(*ki).spawn({1:1, 2:2}.items())
+	ki = [pdctl, '-D', str(route/adapter), 'build', orientation] + symbols
+	pid = execution.KInvocation(pdctl, ki).spawn({1:1, 2:2}.items())
 
 	return inv.exit(os.WEXITSTATUS(os.wait()[1]))
