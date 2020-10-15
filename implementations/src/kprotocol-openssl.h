@@ -249,6 +249,92 @@ library_error(void)
 }
 
 /**
+	// Allocate and initialize the ALPN list from a Python object.
+
+	// Converts the given iterable of bytes objects, &ob, into a single memory allocation
+	// holding the application protocols, &aprotocols.
+
+	// Returns non-zero if a Python exception was set.
+
+	// [ Parameters ]
+	// /ob/
+		// An iterable of bytes instances making up the desired application protocols.
+	// /aprotocols/
+		// Target pointer holding the initialized memory.
+		// Must be freed using &PyMem_Free.
+	// /alength/
+		// Length of &aprotocols.
+*/
+static int
+ialpn(PyObj ob, unsigned char **aprotocols, unsigned int *alength)
+{
+	PyObj item;
+	unsigned char *newbuf = NULL, *oldbuf;
+	Py_ssize_t l = 1;
+
+	oldbuf = PyMem_Malloc(l);
+	if (oldbuf == NULL)
+	{
+		PyErr_SetString(PyExc_MemoryError, "could not allocate buffer for application protocol list");
+		return(NULL);
+	}
+
+	/*
+		// Two pass would be fine, but any memory copy overhead
+		// should be insignificant, so keep it at one and realloc.
+	*/
+
+	PyLoop_ForEach(ob, &item)
+	{
+		unsigned char *a;
+		Py_ssize_t s, i;
+
+		if (!PyBytes_CheckExact(item))
+		{
+			PyErr_SetString(PyExc_ValueError, "application protocols must be bytes instances");
+			break;
+		}
+
+		a = (unsigned char *) PyBytes_AS_STRING(item);
+		s = PyBytes_GET_SIZE(item);
+
+		if (s > 255)
+		{
+			PyErr_SetString(PyExc_ValueError, "application protocol identifier exceeded maximum length");
+			break;
+		}
+
+		newbuf = PyMem_Realloc(oldbuf, l + s + 1);
+		if (newbuf == NULL)
+		{
+			PyErr_SetString(PyExc_MemoryError, "could not expand buffer for application protocol list");
+			break;
+		}
+
+		oldbuf = newbuf;
+
+		/* Length and Identifier */
+		i = l - 1;
+		oldbuf[i] = (unsigned char) s;
+		memcpy(oldbuf+i+1, a, s);
+
+		/* Length of string plus one for the length itself. */
+		l += s + 1;
+	}
+	PyLoop_CatchError(ob)
+	{
+		PyMem_Free(oldbuf);
+		return(-1);
+	}
+	PyLoop_End()
+
+	oldbuf[l-1] = '\0';
+	*aprotocols = oldbuf;
+	*alength = (unsigned int) l;
+	return(0);
+}
+
+/**
 	// primary &transport_new parts. Normally called by the Context methods.
 */
 static Transport
@@ -892,6 +978,7 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		"certificates",
 		"requirements",
 		"ciphers",
+		"applications",
 		NULL,
 	};
 
@@ -902,16 +989,18 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 	PyObj key_ob = NULL;
 	PyObj certificates = NULL; /* iterable */
 	PyObj requirements = NULL; /* iterable */
+	PyObj applications = NULL; /* iterable of bytes */
 
 	char *ciphers = FAULT_OPENSSL_CIPHERS;
 
 	if (!PyArg_ParseTupleAndKeywords(args, kw,
-		"|Os#OOss", kwlist,
+		"|Os#OOsO", kwlist,
 		&key_ob,
 		&(pwp.words), &(pwp.length),
 		&certificates,
 		&requirements,
-		&ciphers
+		&ciphers,
+		&applications
 	))
 		return(NULL);
 
@@ -952,6 +1041,23 @@ context_new(PyTypeObject *subtype, PyObj args, PyObj kw)
 		*/
 		SSL_CTX_set_mode(ctx->tls_context, SSL_MODE_RELEASE_BUFFERS|SSL_MODE_AUTO_RETRY);
 		SSL_CTX_set_read_ahead(ctx->tls_context, 1);
+
+		if (applications != NULL)
+		{
+			unsigned char *aproto = NULL;
+			unsigned int alength = 0;
+
+			if (ialpn(applications, &aproto, &alength))
+				goto error;
+
+			if (SSL_CTX_set_alpn_protos(ctx->tls_context, aproto, alength-1))
+			{
+				PyMem_Free(aproto);
+				goto ierror;
+			}
+
+			PyMem_Free(aproto);
+		}
 	}
 
 	SSL_CTX_load_verify_locations(ctx->tls_context,
