@@ -61,6 +61,17 @@ def load_context(route, type:str, name='pki', intention='optimal'):
 	return loader.load_module()
 
 def load(type:str, application='http', name='pki'):
+	"""
+	# Load the extension module for the given &type and &application.
+
+	# [ Parameters ]
+	# /type/
+		# The identifier for the adapter's protocol.
+		# Normally, (id)`kprotocol-client` or (id)`kprotocol-server`.
+	# /application/
+		# The symbolic name for the application.
+		# Defaults to (id)`http`.
+	"""
 	route = get_application_context(application)
 	return load_context(route, type, name=name)
 
