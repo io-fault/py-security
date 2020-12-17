@@ -1340,7 +1340,7 @@ transport_decipher(PyObj self, PyObj buffer_sequence)
 		char *bufptr;
 		PyObj buffer;
 
-		buffer = PyByteArray_FromObject(NULL);
+		buffer = PyByteArray_FromStringAndSize("", 0);
 		if (buffer == NULL)
 		{
 			Py_DECREF(rob);
@@ -1496,7 +1496,7 @@ transport_encipher(PyObj self, PyObj buffer_sequence)
 		char *bufptr = 0;
 		PyObj buffer;
 
-		buffer = PyByteArray_FromObject(NULL);
+		buffer = PyByteArray_FromStringAndSize("", 0);
 		if (buffer == NULL)
 			return(NULL);
 
