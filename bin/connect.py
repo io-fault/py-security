@@ -8,13 +8,9 @@ from ...system import files
 from ...system import process
 from ...system import execution
 
-from ...text.bin import ifst
 from ...project import root
 from ...project import factory
 from ...project import types
-
-from .. import __file__ as pkgprefix
-pkgprefix = files.Path.from_path(pkgprefix).container
 
 info = types.Information(
 	identifier = 'http://fault.io/python/security/kprotocol-',
@@ -37,7 +33,24 @@ infra = {
 	'*.h': [
 		types.Reference('http://if.fault.io/factors', types.factor@'system', 'type', 'c-header'),
 	],
+	'*.pyi': [
+		types.Reference('http://if.fault.io/factors', types.factor@'python-interface', 'type', 'v3'),
+	],
 }
+
+module_template = """
+	#define ADAPTER_{upper} 1
+	#define ADAPTER_TRANSPORT_NEW transport_new_{lower}
+	#define ADAPTER_VERIFY SSL_VERIFY_PEER
+	#define CONTEXT_LOCATION "{context}"
+	#include <kprotocol-openssl.h>
+	#include <fault/python/module.h>
+
+	INIT(module, 0, PyDoc_STR("{lower} kprotocol adapter using OpenSSL."))
+	{{
+		return(init_implementation_data(module));
+	}}
+"""
 
 def init_product(route, roots):
 	pdr = (route/'.product').fs_mkdir()
@@ -49,33 +62,42 @@ def init_product(route, roots):
 	return pd
 
 def init_project(product, orientation):
+	ctxloc = product ** 2 # Stored Security Context location.
 	route = product/orientation
+	factor = 'extensions.pki'
+	syms = ['implementation', 'project-c-interfaces']
 
 	pi = copy.copy(info)
 	pi.identifier += orientation
 	pi.name += orientation
 
-	p = factory.Parameters.define(pi, infra.items())
+	srcs = [
+		('module.c', module_template.format(
+			upper = orientation.upper(),
+			lower = orientation,
+			context = str(ctxloc),
+		)),
+	]
+
+	pif = [
+		('pki', types.factor@'python-interface', "# Empty."),
+	]
+	ext = [
+		(factor, 'extension', syms, srcs),
+	]
+
+	p = factory.Parameters.define(pi, infra.items(), sets=ext, soles=pif)
 	factory.instantiate(p, route)
-	(route/'extensions').fs_mkdir()
 
 def main(inv:process.Invocation) -> process.Exit:
-	source = pkgprefix / 'adapters.txt'
 	target, adapter, implementation, orientation, intpath, *pdctl = inv.args
 
 	route = files.Path.from_path(target) / 'if'
-
 	init_project(route/adapter, orientation)
-
-	factor = route / adapter / orientation / 'extensions' / 'pki'
-	ifst.instantiate(factor, source, '-'.join([adapter, orientation, implementation]))
 
 	pd = init_product(route/adapter, [orientation])
 	cxn = pd.connections_index_route
 	cxn.fs_init(intpath.encode('utf-8'))
-
-	ctx_data = factor / 'src' / 'context-data.h'
-	ctx_data.set_text_content("#define CONTEXT_LOCATION \"%s\"" % (str(route.container)))
 
 	if pdctl:
 		pdctl, *symargs = pdctl
