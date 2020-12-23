@@ -2,6 +2,7 @@
 # Connect an adapter to the stored security context.
 """
 import os
+import copy
 
 from ...system import files
 from ...system import process
@@ -9,75 +10,77 @@ from ...system import execution
 
 from ...text.bin import ifst
 from ...project import root
+from ...project import factory
+from ...project import types
 
 from .. import __file__ as pkgprefix
 pkgprefix = files.Path.from_path(pkgprefix).container
 
-project_info = {
-	'authority': "`fault.io`",
-	'abstract': "Transport Security Adapter",
-	'icon': "- (emoji)`🔒`",
-	'contact': "&<http://fault.io/critical>"
+info = types.Information(
+	identifier = 'http://fault.io/python/security/kprotocol-',
+	name = 'kprotocol-',
+	authority = 'fault.io',
+	abstract = "Transport Security Adapter",
+	icon = dict([('emoji', "🔒")]),
+	contact = "&<http://fault.io/critical>"
+)
+
+infra = {
+	'project-c-interfaces': [
+		types.Reference('http://fault.io/integration/machine', types.factor@'include'),
+		types.Reference('http://fault.io/integration/python', types.factor@'include'),
+		types.Reference('http://fault.io/python/security', types.factor@'implementations'),
+	],
+	'*.c': [
+		types.Reference('http://if.fault.io/factors', types.factor@'system', 'type', 'c'),
+	],
+	'*.h': [
+		types.Reference('http://if.fault.io/factors', types.factor@'system', 'type', 'c-header'),
+	],
 }
-
-project_infra = """! CONTEXT:
-	/protocol/
-		&<http://if.fault.io/project/infrastructure>
-
-/project-c-interfaces/
-	- &<http://fault.io/engineering/posix/include>
-	- &<http://fault.io/engineering/python/include>
-	- &<http://fault.io/python/security/implementations>
-"""
 
 def init_product(route, roots):
 	pdr = (route/'.product').fs_mkdir()
 	(pdr/'ROOTS').set_text_content(' '.join(roots))
 	pd = root.Product(route)
 	pd.roots = [root.types.factor@x for x in roots]
+	pd.update()
+	pd.store()
 	return pd
 
 def init_project(product, orientation):
 	route = product/orientation
-	route.fs_mkdir()
 
-	pi = dict(project_info)
-	pi['identifier'] = 'http://fault.io/python/security/kprotocol-' + orientation
-	pi['name'] = 'kprotocol-' + orientation
+	pi = copy.copy(info)
+	pi.identifier += orientation
+	pi.name += orientation
 
-	(route/'.protocol').set_text_content(pi['identifier'] + ' factors/polynomial-1')
-	f = route / 'project.txt'
-	f.set_text_content(
-		"! CONTEXT:\n"
-		"\t/protocol/\n"
-		"\t\t&<http://if.fault.io/project/information>\n\n" + "\n".join([
-			"/%s/\n\t%s" % i for i in pi.items()
-		]) + "\n"
-	)
+	p = factory.Parameters.define(pi, infra.items())
+	factory.instantiate(p, route)
 	(route/'extensions').fs_mkdir()
-
-	i = route / 'infrastructure.txt'
-	i.set_text_content(project_infra)
 
 def main(inv:process.Invocation) -> process.Exit:
 	source = pkgprefix / 'adapters.txt'
-	target, adapter, implementation, orientation, pdctl, *symargs = inv.args
+	target, adapter, implementation, orientation, intpath, *pdctl = inv.args
 
 	route = files.Path.from_path(target) / 'if'
 
-	pd = init_product(route/adapter, [orientation])
-
 	init_project(route/adapter, orientation)
+
 	factor = route / adapter / orientation / 'extensions' / 'pki'
 	ifst.instantiate(factor, source, '-'.join([adapter, orientation, implementation]))
-	pd.update()
-	pd.store()
+
+	pd = init_product(route/adapter, [orientation])
+	cxn = pd.connections_index_route
+	cxn.fs_init(intpath.encode('utf-8'))
 
 	ctx_data = factor / 'src' / 'context-data.h'
 	ctx_data.set_text_content("#define CONTEXT_LOCATION \"%s\"" % (str(route.container)))
 
-	symbols = ['implementation'] + symargs
-	ki = [pdctl, '-D', str(route/adapter), 'build', orientation] + symbols
-	pid = execution.KInvocation(pdctl, ki).spawn({1:1, 2:2}.items())
+	if pdctl:
+		pdctl, *symargs = pdctl
+		symbols = ['implementation'] + symargs
+		ki = [pdctl, '-D', str(route/adapter), 'build', orientation] + symbols
+		pid = execution.KInvocation(pdctl, ki).spawn({1:1, 2:2}.items())
 
 	return inv.exit(os.WEXITSTATUS(os.wait()[1]))
