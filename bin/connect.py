@@ -8,11 +8,10 @@ from ...system import files
 from ...system import process
 from ...system import execution
 
-from ...project import root
+from ...project import system as lsf
 from ...project import factory
-from ...project import types
 
-info = types.Information(
+info = lsf.types.Information(
 	identifier = 'http://fault.io/python/security/kprotocol-',
 	name = 'kprotocol-',
 	authority = 'fault.io',
@@ -23,18 +22,18 @@ info = types.Information(
 
 infra = {
 	'project-c-interfaces': [
-		types.Reference('http://fault.io/integration/machine', types.factor@'include'),
-		types.Reference('http://fault.io/integration/python', types.factor@'include'),
-		types.Reference('http://fault.io/python/security', types.factor@'implementations'),
+		lsf.types.Reference('http://fault.io/integration/machine', lsf.types.factor@'include'),
+		lsf.types.Reference('http://fault.io/integration/python', lsf.types.factor@'include'),
+		lsf.types.Reference('http://fault.io/python/security', lsf.types.factor@'implementations'),
 	],
 	'*.c': [
-		types.Reference('http://if.fault.io/factors', types.factor@'system', 'type', 'c'),
+		lsf.types.Reference('http://if.fault.io/factors', lsf.types.factor@'system', 'type', 'c'),
 	],
 	'*.h': [
-		types.Reference('http://if.fault.io/factors', types.factor@'system', 'type', 'c-header'),
+		lsf.types.Reference('http://if.fault.io/factors', lsf.types.factor@'system', 'type', 'c-header'),
 	],
 	'*.pyi': [
-		types.Reference('http://if.fault.io/factors', types.factor@'python-interface', 'type', 'v3'),
+		lsf.types.Reference('http://if.fault.io/factors', lsf.types.factor@'python-interface', 'type', 'v3'),
 	],
 }
 
@@ -56,7 +55,7 @@ def init_product(route, roots):
 	pdr = (route/'.product').fs_mkdir()
 	(pdr/'ROOTS').set_text_content(' '.join(roots))
 	pd = root.Product(route)
-	pd.roots = [root.types.factor@x for x in roots]
+	pd.roots = [lsf.types.factor@x for x in roots]
 	pd.update()
 	pd.store()
 	return pd
@@ -80,7 +79,7 @@ def init_project(product, orientation):
 	]
 
 	pif = [
-		('pki', types.factor@'python-interface', "# Empty."),
+		('pki', lsf.types.factor@'python-interface', "# Empty."),
 	]
 	ext = [
 		(factor, 'extension', syms, srcs),

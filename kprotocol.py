@@ -8,7 +8,7 @@ import importlib.machinery
 from ..context import weak
 from ..kernel import flows
 from ..system import identity
-from ..project import root
+from ..project import system as lsf
 
 def get_application_context(application='http'):
 	import os
@@ -46,7 +46,7 @@ def load_context(route, type:str, name='pki', intention='optimal'):
 	sys, arch = identity.root_execution_context()
 	product = route@'if/kprotocol'
 
-	ctx = root.Context()
+	ctx = lsf.Context()
 	ctx.connect(product)
 	ctx.load()
 	for pj in ctx.iterprojects():
@@ -56,7 +56,7 @@ def load_context(route, type:str, name='pki', intention='optimal'):
 		raise Exception("security context did not have a kprotocol %s project" %(type,))
 
 	var = {'system': sys, 'architecture': arch, 'intention': intention}
-	dllpath = pj.image(var, root.types.factor@"extensions"/name)
+	dllpath = pj.image(var, lsf.types.factor@"extensions"/name)
 	loader = importlib.machinery.ExtensionFileLoader(name, str(dllpath))
 	return loader.load_module()
 
