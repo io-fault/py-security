@@ -5,7 +5,7 @@
 /identifier/
 	&<http://fault.io/python/security>
 /icon/
-	- (emoji)`🔑`
+	- (emoji)`🛡️
 /name/
 	`security`
 /abstract/
