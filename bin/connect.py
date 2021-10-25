@@ -27,13 +27,16 @@ infra = {
 		lsf.types.Reference('http://fault.io/python/security', lsf.types.factor@'implementations'),
 	],
 	'*.c': [
-		lsf.types.Reference('http://if.fault.io/factors', lsf.types.factor@'system', 'type', 'c'),
+		lsf.types.Reference('http://if.fault.io/factors',
+			lsf.types.factor@'system', 'type', 'c.2011'),
 	],
 	'*.h': [
-		lsf.types.Reference('http://if.fault.io/factors', lsf.types.factor@'system', 'type', 'c-header'),
+		lsf.types.Reference('http://if.fault.io/factors',
+			lsf.types.factor@'system', 'type', 'c.header'),
 	],
 	'*.pyi': [
-		lsf.types.Reference('http://if.fault.io/factors', lsf.types.factor@'python-interface', 'type', 'v3'),
+		lsf.types.Reference('http://if.fault.io/factors',
+			lsf.types.factor@'python-interface', 'type', 'v3'),
 	],
 }
 
